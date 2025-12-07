@@ -1,0 +1,32 @@
+PROSEDÜRLER
+assign_all_roles_permissions() - bu prosedür rollere yetkilerini atamayı sağlıyor manuel yapıyor dinamik hale getirilmedi ekledikten sonra hangi sırayla gelceği belli olduğundan eğer gelmezse TRUNCATE ve ekleme sırasını 0 ladığımızda öyle gelmek zorunda
+
+pr_add_account_types() - Hesap türlerini ekliyor Banka , Kredi , Hibrit türlerini.
+(Hibrit Hesap literatüre yeni kazandırdım :) bu uygulamaya özgü kendi kuralları var )
+
+pr_add_admin_and_Manager() - Adminin ve Managerın hesaplarını ekliyor çünkü bankada sadece müşteri hesabı eklenmesi yapılır ilk başta müdür ve admin aktarılamaz.
+
+pr_add_card_types() - Kart türlerini ekliyor banka, kredi, hibrit, sanal kart türlerini ekliyor.
+
+pr_add_cities_and_branches() - Şehirleri ve Bunlara bağlı şubelerini ekliyor 
+
+pr_add_currency() - Kurları ekliyor güncelleyip ona göre hesap dönüşümü vs gerekiyorsa direkt burdan dönüşüm yapılabilsin diye ekledim. 
+
+pr_add_debt_to_customer(int user_id) - verilen kullanıcının kredi hibrit veya sanal kartlarına varsa eğer 1 er kez rastgele borç ekliyor kişi dışarıdan gerçekten alışveriş yapamadığından bunu eklemek zorundaydım borç ödeme işlemi için 
+
+pr_add_roles_and_permissions() - rolleri ve yetkileri manuel olarak ekliyoruz çekmeyle uğraşmadım kendim sırasını bildiğim için direkt sırayla atadım gene idlerini çekerek sırayla yapması daha düzenli olur.
+
+Triggerlar
+Genelde Log kaydını almak için kullandım triggerları bankalarda gerekli bir durum.
+
+fn_record_user_deleting() kullanıcının silinmesini log_records tablosuna ekliyoruz ne zaman silindi adı soyadı ne gibi bilgilerle içeride çekiliyor.
+
+fn_record_user_updating() kullanıcının verileri değiştirilirse eğer kayıt altına alınıyor tekrardan 
+
+record_account_create() hesap oluşturunca bunun log kaydını otomatik almamızı sağlıyor 
+
+record_account_delete() hesap silinince bunun log kaydını almamızı sağlıyor.
+
+record_card_delete() kart silinince bunun kaydınız alıyoruz.
+
+record_user_creating() kullanıcı oluşturulduğunda bunun log kaydınız alıyoruz.

@@ -1,0 +1,920 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+
+
+*{
+    margin: 0;
+    padding: 0;
+    text-decoration: none;
+    box-sizing: border-box;
+    list-style: none;
+}
+
+
+:root {
+    --White_Color: white;
+    --Background__Colour: #2b2d31;
+    --Alternative__Bg: #ebf8f8;
+    --Font__Colour: rgb(58, 58, 58);
+    --Alternative__FC: rgb(241, 241, 241);
+    --Fail__Colour: rgb(226, 29, 29);
+    --Success__Colour: rgba(50, 216, 72, 0.808);
+    --Nav__Colour: #1f242dea;
+
+    --Nav-Hover-Colour: rgb(43, 131, 247);
+}
+
+body{
+    background: var(--Background__Colour);
+    font-family: Poppins;
+}
+
+a{
+    color: var(--White_Color);
+    transition: all 350ms ease;
+}
+
+h1{
+    font-size: 3.2rem;
+    line-height: 2rem;
+}
+h2{
+    font-size: 2.8rem;
+}
+h3{
+    font-size: 2.4rem;
+}
+h4{
+    font-size: 2.0rem;
+}
+h5{
+    font-size: 1.6rem;
+}
+h6{
+    font-size: 1.2rem;
+}
+
+p{
+    font-size: 1rem;
+}
+
+img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    object-fit: cover;
+}
+
+/*========================== Nav Style ==========================*/
+
+nav{
+    position: fixed;
+    z-index: 10;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 3.6rem;
+    background: var(--Nav__Colour);
+    box-shadow: 0 0 0.4rem rgba(233, 233, 233, 0.527);
+    border-bottom: 1px solid rgb(190, 189, 189);
+}
+
+.nav__container{
+    width: 100%;
+    height: 100%;
+    padding: 0 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.nav__container .Logo{
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    width: 10rem;
+    transition: all 500ms ease;
+    gap: 0;
+}
+
+.nav__container .Logo:hover{
+    gap: 0.1rem;
+}
+
+.Logo img {
+    width: 3rem;
+    aspect-ratio: 1/1;
+}
+
+.nav__container .Logo p{
+ font-size: 1.5rem;
+ font-weight: 500;
+ transition: all 350ms ease;
+ width: 5rem;
+ text-align: center;
+ color: white;
+}
+
+.nav__container .Logo:hover p{
+ font-weight: 500;
+ letter-spacing: 0.1rem;
+ color: var(--Nav-Hover-Colour);
+ margin-left: 0.1rem;
+}
+
+.nav__container .nav__options {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 1.1rem;
+}
+
+.nav__container .nav__options .nav__option {
+    width: 8rem;
+    text-align: center;
+    transition: all 350ms ease;
+}
+
+.nav__option a{
+    color: rgb(245, 245, 245);
+}
+
+.nav__option a:hover{
+    letter-spacing: 0.1rem;
+    color: white;
+}
+
+.Profile{
+    display: flex;
+    flex-direction: column;
+    height: 3.6rem;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    transition: all 350ms ease;
+    width: 9rem;
+}
+
+.Profile .profile_head{
+    color: rgb(245, 245, 245);
+}
+
+.Profile .profile_head:hover {
+    letter-spacing: 0.1rem;
+    color: rgb(255, 255, 255);
+}
+
+.Profile:hover  ul {
+    transform: translateY(0);
+    opacity: 1;
+    display: block;
+}
+
+.Profile ul {
+    letter-spacing: 0;
+    box-shadow: 0 0 0.4rem rgba(233, 233, 233, 0.527);
+    position: absolute;
+    top: 3.6rem;
+    background: #1f242dd7;
+    place-items: center;
+    transition: all 350ms ease;
+    transform: translateY(-1.8rem);
+    opacity: 0;
+    display: none;
+}
+
+.Profile .profile_option{
+    width: 10rem;
+    height: 2.4rem;
+    transition: all 350ms ease;
+    border: 1px solid transparent;
+}
+
+.Profile .profile_option a{
+    display: block;
+    color: white;
+    width: 100%;
+    height: 100%;
+    padding: 0.3rem 0.4rem;
+    border: 1px solid transparent;
+}
+
+.Profile .profile_option a:hover {
+    color: var(--Nav-Hover-Colour);
+    text-shadow:0 0 0.1rem var(--Nav-Hover-Colour);
+}
+
+
+.Profile .Profile__options .profile_option:hover{
+    border: 1px solid rgb(49, 152, 248);
+}
+
+.Profile .Profile__options .profile_option:last-child:hover{
+    border: 1px solid rgb(240, 25, 25);
+}
+
+.Profile .Profile__options .profile_option:last-child:hover a {
+    color: var(--Fail__Colour);
+    text-shadow:0 0 0.1rem var(--Fail__Colour);
+}
+
+section{
+    padding: 5rem 0;
+    min-height: 100vh;
+    width: 100%;
+}
+
+.section__container{
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.form__container{
+    background: #ffffff;
+    box-shadow: 0 0 0.8rem rgb(233, 233, 233);
+    border-radius: 0.6rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    min-width: 25rem;
+}
+
+.section__container .sign_form{
+    padding: 1.4rem 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.section__container h2 {
+    color: rgb(64, 154, 238);
+}
+
+.double_container{
+    display: flex;
+    gap: 0.3rem;
+    padding: 0.5rem 0;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.form__container .information {
+    border-bottom: 1px solid #b9b9b9;
+    text-align: center;
+}
+
+
+input, select {
+    padding: 0.5rem 0.25rem;
+    border-radius: 0.3rem;
+    border: 1px solid rgb(88, 88, 88);
+}
+
+input:focus,select:focus,textarea:focus{
+    outline-color: rgb(64, 154, 238);
+    border-radius: 0.1rem;
+}
+
+input:focus::placeholder,select:focus::placeholder,textarea:focus::placeholder{
+    color: rgb(64, 154, 238);
+}
+
+
+
+textarea {
+    padding: 0.5rem 0.25rem;
+    height: 7rem;
+    resize: none;
+}
+
+.form__button{
+    padding: 0.8rem 0.6rem;
+    color: rgba(255, 255, 255, 0.87);
+    background: rgb(64, 154, 238);
+    box-shadow: 0 0 0.3rem rgb(84, 170, 252);
+    border-radius: 0.5rem;
+    transition: all 350ms ease;
+    max-width: 12rem;
+    border: none;
+    cursor: pointer;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.form__button:hover{
+    box-shadow: 0 0 0.6rem rgb(64, 154, 238);
+    background: rgb(71, 164, 252);
+    color: white;
+}
+
+.form_submit_container{
+    padding: 0.8rem 0 0 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.form_submit_container a {
+    color: rgb(64, 154, 238);
+}
+
+/*===================Footer===================*/
+
+footer{
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    border-top: 1px solid rgb(77, 77, 77);
+    background: #1f242d;
+    color: white;
+}
+
+.footer__container{
+    width: 100%;
+    display: grid;
+    place-items: center;
+    grid-template-columns: repeat(auto-fit, minmax(25rem, 1fr));
+    padding: 3rem 0;
+    gap: 1rem;
+}
+
+.footer__copyright{
+    border-top: 1px solid rgb(77, 77, 77);
+    width: 100%;
+    text-align: center;
+}
+
+.Contact__address{
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+.Announcement{
+    text-align: center;
+}
+
+.Bank__personels{
+    text-align: center;
+}
+
+
+
+.Bank__personels a {
+    position: relative;
+    background: rgba(44, 162, 247, 0.24);
+    border: 2px solid rgb(64, 154, 238);
+    width: 6rem;
+    aspect-ratio: 1/1;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: visible; /* dışarı taşabilsin */
+    transition: all 0.3s ease;
+}
+
+.Bank__personels a:hover {
+    transform: scale(1.05);
+    background: rgba(44, 162, 247, 0.11);
+    border: 2px solid rgb(45, 131, 211);
+}
+
+/* Parlama halkası */
+.Bank__personels a::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 2px solid rgb(64, 154, 238);
+    opacity: 0;
+    transform: scale(1);
+    transition: transform 0.6s ease, opacity 0.6s ease;
+}
+
+/* Hover olunca dışa yayılan animasyon */
+.Bank__personels a:hover::after {
+    opacity: 1;
+    transform: scale(1.6);
+    opacity: 0; /* dışa yayılırken kaybolur */
+    animation: pulseEffect 0.8s ease-out infinite;
+}
+
+
+/* Tekrar eden yayılma animasyonu */
+@keyframes pulseEffect {
+    0% {
+        transform: scale(1);
+        opacity: 0.6;
+    }
+    100% {
+        transform: scale(1.8);
+        opacity: 0;
+    }
+}
+
+.Bank__personels a img {
+    width: 5rem;
+    aspect-ratio: 1/1;
+}
+/*============== Personel Management ===============*/
+
+.ManagementPanel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    background: var(--Background__Colour, #111);
+    color: #fff;
+    padding: 5rem 1rem;
+    box-sizing: border-box;
+}
+
+/* --- SOL MENÜ --- */
+.Sidebar {
+    background: #1f242d;
+    border-radius: 4px;
+    padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 0.4rem rgba(233, 233, 233, 0.527);
+}
+.Sidebar h5 {
+    margin-bottom: 1rem;
+    font-size: 1rem;
+}
+.Sidebar ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.Sidebar li {
+    margin-bottom: 0.6rem;
+}
+.Sidebar li a {
+    display: block;
+    color: white;
+    background: #2a303a;
+    text-decoration: none;
+    padding: 0.6rem 1rem;
+    border-radius: 4px;
+    transition: all 0.3s ease;
+    border: 1px solid rgba(64, 154, 238, 0);
+}
+.Sidebar li a:hover,
+.Sidebar li a.active {
+    border: 1px solid rgb(64, 154, 238);
+}
+
+/* --- SAĞ KISIM GRID: İşlem Listesi + Detay --- */
+.Transaction_Grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); /* Orta + Sağ detay alanı */
+    gap: 1rem;
+}
+
+/* ORTA KISIM (İşlem Listesi) */
+.Main__Section {
+    box-shadow: 0 0 0.4rem rgba(233, 233, 233, 0.527);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #1f242d;
+    border-radius: 4px;
+    padding: 1rem;
+    overflow-y: auto;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    min-height: 20rem;
+}
+.Main__Section h5 {
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+}
+.Transaction__List {
+    display: grid;
+    gap: 0.7rem;
+    max-height: 24rem;
+}
+
+.Transaction__Item {
+    background: #2a303a;
+    padding: 0.8rem;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: 0.2s;
+    width: 100%;
+    height: 100%;
+    text-align: left;
+    color: rgb(245, 245, 245);
+}
+.Transaction__Item:hover {
+    border-color: rgb(64, 154, 238);
+}
+
+/* SAĞ KISIM (Detay Paneli) */
+.Detail__Section {
+    background: #1f242d;
+    border-radius: 4px;
+    padding: 3rem 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 0 0.4rem rgba(233, 233, 233, 0.527);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 20rem;
+}
+.Detail__Section h5 {
+    margin-bottom: 1rem;
+    font-size: 0.95rem;
+}
+.Detail__Content {
+    flex: 1;
+    font-size: 0.9rem;
+}
+
+/* Butonlar */
+.DetailButtons {
+    display: flex;
+    gap: 0.7rem;
+    margin-top: 1rem;
+}
+.DetailButtons button {
+    flex: 1;
+    border: none;
+    border-radius: 4px;
+    padding: 0.6rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: 0.3s;
+}
+.btn-approve {
+    background: rgb(64, 154, 238);
+    color: white;
+}
+.btn-reject {
+    background: crimson;
+    color: white;
+}
+.btn-approve:hover {
+    background: rgb(45, 130, 210);
+}
+.btn-reject:hover {
+    background: rgb(190, 20, 50);
+}
+
+.Sidebar {
+    background: #1f242d;
+    border-radius: 4px;
+    padding: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 0 0.4rem rgba(233, 233, 233, 0.527);
+}
+
+.Transaction_Grid_Client {
+    display: grid;
+    grid-template-columns: 30% 68%; /* Orta + Sağ detay alanı */
+    gap: 1rem;
+}
+
+@media screen and (max-width: 800px)  {
+    .Transaction_Grid_Client {
+    grid-template-columns: 1fr; /* Orta + Sağ detay alanı */
+}
+}
+/* Client Page */
+
+.ClientDetailSection {
+    background: #1f242d;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 0 0.4rem rgba(233, 233, 233, 0.527);
+    border-radius: 4px;
+    padding: 2rem 1rem;
+    overflow-y: auto;
+    width: 100%;
+    min-height: 32rem;
+}
+
+.ClientDetailSection h5 {
+    margin-bottom: 1rem;
+    font-size: 1rem;
+}
+
+.DetailContent {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    font-size: 0.9rem;
+    min-width: 18rem;
+    max-height: 24rem;
+}
+
+.CardInfo p {
+    margin: 0.3rem 0;
+}
+
+.CardActions label {
+    display: block;
+    margin-top: 0.5rem;
+}
+
+.CardActions select,
+.CardActions input,
+.CardActions textarea {
+    width: 100%;
+    margin-top: 0.3rem;
+    padding: 0.5rem;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    background: #2a303a;
+    color: #f5f5f5;
+}
+
+.LimitInput {
+    margin-top: 0.5rem;
+}
+
+.DetailButtons {
+    display: flex;
+    gap: 0.7rem;
+    margin-top: 1rem;
+}
+
+.ClientBtnUpdate {
+    flex: 1;
+    background: rgb(64, 154, 238);
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.6rem;
+    cursor: pointer;
+}
+
+.ClientBtnDelete {
+    flex: 1;
+    background: crimson;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.6rem;
+    cursor: pointer;
+}
+
+.ClientBtnUpdate:hover {
+    background: rgb(45, 130, 210);
+}
+
+.ClientBtnDelete:hover {
+    background: rgb(190, 20, 50);
+}
+
+.payment_info{
+    display: grid;
+    grid-template-columns: 50% 50%;
+    align-items: center;
+}
+
+.payment_options{
+    padding: 0.2rem 0.3rem;
+}
+
+.card_informations{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 0 0.2rem 0;
+}
+
+.card_informations h5 {
+    margin: 0;
+}
+
+.card_informations label {
+    margin: 0;
+}
+
+.card_informations a {
+    color: rgb(31, 139, 240);
+}
+
+.payment_options .information {
+    display: flex;
+    justify-content: space-between;
+}
+
+.payment_options .information label{
+    text-wrap: nowrap;
+}
+
+/*=============Personel İşlemleri Stili===========*/
+
+.personel-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+    gap: 25px;
+    margin-top: 20px;
+}
+
+/* Kart görünümü */
+.personel-card {
+    padding: 22px;
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+}
+
+.personel-card h4 {
+    margin-bottom: 15px;
+    font-size: 18px;
+}
+
+/* Form */
+.personel-form .form-group {
+    margin-bottom: 12px;
+}
+
+.personel-form label {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.personel-form input,
+.personel-form select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+}
+
+/* Butonlar */
+.btnCreate {
+    width: 100%;
+    padding: 10px;
+    margin-top: 10px;
+    background: #1976D2;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+/* Tablo */
+.personel-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+
+.personel-table th,
+.personel-table td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #eee;
+}
+
+/* Credit Card Appearance */
+
+.Card_Sections{
+    display: grid;
+    grid-template-columns: repeat(auto-fit,minmax(16.5rem,1fr));
+    place-items: center;
+    gap: 1rem;
+    width: 100%;
+    padding: 0.5rem 0.5rem;
+}
+
+
+.progress_bar{
+    width: 100%;
+    background: rgb(248, 248, 248);
+    border-radius: 0.8rem;
+    height: 2rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 0.45rem;
+}
+
+.progress{
+    width: 96%;
+    height: 1.2rem;
+    background: #e0e0e0;
+    border-radius: 0.8rem;
+}
+
+.progress .inside{
+    height: 100%;
+    width: var(--progress);
+    background: var(--progress_color);
+    border-radius: 0.8rem;
+    text-align: center;
+}
+
+
+.Credit_Card{
+    width: 16.5rem;
+    height: 10rem;
+    border-radius: 0.8rem;
+    background: var(--card_background);
+    background-image: url('../images/pattern.png');
+    background-size: cover; /* kartı tamamen kaplasın */
+    background-position: center; /* ortalansın */
+    box-shadow: 0 0 0.4rem white;
+    padding: 0.36rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: all 350ms ease;
+    color: white;
+    border: none;
+    cursor: pointer;
+}
+
+.Credit_Card:hover{
+    box-shadow: 0 0 1.4rem rgb(255, 255, 255);
+}
+
+.bank_infoside .top{
+    display: flex;
+    justify-content: space-between;
+    padding: 0 4rem 0 0;
+    align-items: center;
+}
+
+.bank_infoside .top label {
+    font-size: 0.8rem;
+}
+
+.bank_infoside .bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.bank_infoside .bottom .card_type {
+    width: 2.6rem;
+    height: 2.2rem;
+    background: rgba(255, 255, 255, 0.644);
+    border-radius: 0.4rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+
+.Credit_Card .bank_nameside{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.Debt_amount{
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: var(--debt_color);
+    border-radius: 0.4rem;
+    padding: 0.4rem;
+}
+
+/* Debts ve log kayıtları tablosu*/
+.detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.detail-table th, .detail-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+}
+
+.detail-table thead {
+    font-weight: 600;
+}
+
+.detail-table tbody tr:hover {
+    transition: background-color 0.2s;
+}
+
+.detail-table th {
+    border-bottom: 1px solid #e0e0e0;
+}
+
+.detail-table td {
+    border-bottom: 1px solid #e0e0e0;
+}
+
+

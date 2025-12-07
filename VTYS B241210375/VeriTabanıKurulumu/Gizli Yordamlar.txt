@@ -1,0 +1,225 @@
+CREATE OR REPLACE PROCEDURE pr_add_cities_and_branches()
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    ist_id INT;
+    ank_id INT;
+    izm_id INT;
+    sak_id INT;
+BEGIN
+    -- 1) Şehirleri ekle (aynı isim varsa atla)
+    INSERT INTO cities (name) VALUES ('İstanbul');
+    INSERT INTO cities (name) VALUES ('Ankara');
+    INSERT INTO cities (name) VALUES ('İzmir');
+    INSERT INTO cities (name) VALUES ('Sakarya');
+
+    -- 2) Eklenen / var olan şehirlerin id'lerini al
+    SELECT id INTO ist_id FROM cities WHERE name = 'İstanbul' LIMIT 1;
+    SELECT id INTO ank_id FROM cities WHERE name = 'Ankara' LIMIT 1;
+    SELECT id INTO izm_id FROM cities WHERE name = 'İzmir' LIMIT 1;
+    SELECT id INTO sak_id FROM cities WHERE name = 'Sakarya' LIMIT 1;
+
+    -- 3) Şubeleri ekle (branch_code üzerinde UNIQUE varsa çakışmayı at)
+    INSERT INTO branches (name, branch_code, city_id, address)
+    VALUES
+      ('İstanbul Merkez', 'IST001', ist_id, 'Beyoğlu / İstanbul'),
+      ('Ankara Şube',    'ANK001', ank_id, 'Kızılay / Ankara'),
+      ('İzmir Şube',     'IZM001', izm_id, 'Konak / İzmir'),
+      ('Sakarya Şube',   'SAK001', sak_id, 'Adapazarı / Sakarya');
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE pr_add_roles_and_permissions()
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    mudur_id INT;
+BEGIN
+    INSERT INTO permissions (name, description) VALUES
+        ('Log_Islemleri', 'Log kayıtlarını görüntüleme, yönetme yetkisi'),
+        ('Kullanıcı_Islemleri', 'Kullanıcı ekleme, güncelleme, silme işlemleri'),
+        ('Transfer_Islemleri', 'Havale, EFT ve para transferi işlemleri'),
+        ('Personel_Islemleri', 'Personel ekleme, düzenleme ve görev yönetimi'),
+        ('Musteri_Islemleri', 'Müşteri kayıt ve bilgi işlemleri'),
+        ('Kart_Hesap_Islemleri', 'Kart ve hesap oluşturma, güncelleme ve silme işlemleri')
+    ON CONFLICT (name) DO NOTHING;
+
+      INSERT INTO roles (name, description) VALUES
+        ('Müdür', 'Tüm sistem işlemlerini yönetebilir.'),
+        ('Müdür Yardımcısı', 'Müdüre bağlı çalışır, personel ve işlemleri yönetebilir.'),
+        ('Şube Müdürü', 'Sadece kendi şubesindeki işlemleri yönetebilir.'),
+        ('Kredi Uzmanı', 'Kredi başvurularını inceler ve onaylar.'),
+        ('Müşteri Temsilcisi', 'Müşteri hesaplarını ve bilgilerini yönetir.'),
+        ('Gişe Görevlisi', 'Para yatırma, çekme ve transfer işlemlerini yürütür.'),
+        ('Güvenlik Görevlisi', 'Sistem erişimi ve giriş loglarını denetler.'),
+        ('Hizmetli', 'Sistemsel erişimi olmayan personel.')
+    ON CONFLICT (name) DO NOTHING;
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE pr_add_admin_and_manager()
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    sube_mudur_role_id INT;
+    mudur_user_id INT;
+BEGIN
+    SELECT id INTO sube_mudur_role_id FROM roles WHERE name = 'Müdür' LIMIT 1;
+    SELECT id INTO ist_branch_id FROM branches WHERE name = 'İstanbul Merkez' LIMIT 1;
+
+    INSERT INTO users (name, surname, email, password, date_of_birth, gender, is_admin, is_personel, address, phone_number)
+    VALUES
+        ('Admin', 'Sistem', 'admin@bank.com', encode(digest('admin', 'sha256'), 'hex'), '1980-01-01', 0, TRUE, FALSE, 'Genel Merkez', '05000000000'),
+        ('Ahmet', 'Yılmaz', 'mudur@bank.com', encode(digest('mudur', 'sha256'), 'hex'), '1985-05-05', 0, FALSE, TRUE, 'İstanbul Merkez', '05000000001')
+    ON CONFLICT (email) DO NOTHING;
+
+    SELECT id INTO mudur_user_id FROM users WHERE email = 'mudur@bank.com' LIMIT 1;
+
+    INSERT INTO personels (user_id, role_id)
+    VALUES
+        (mudur_user_id, sube_mudur_role_id)
+    ON CONFLICT (user_id) DO NOTHING;
+END;
+$$;
+CREATE EXTENSION IF NOT EXISTS pgcrypto; -- şifreleme için 
+ALTER TABLE roles ADD CONSTRAINT unique_role_name UNIQUE (name);
+ALTER TABLE permissions ADD CONSTRAINT unique_permission_name UNIQUE (name); 
+bir de rolleri ve yetkileri unique yapıyoruz değilse aynı şeyi eklemesin
+ON CONFCLİCT unique olduğu için eklemesini engelliyor gene.
+
+
+CREATE OR REPLACE PROCEDURE pr_add_debt_to_customer(p_user_id INT)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+    r_card RECORD;
+    debt_amount NUMERIC;
+BEGIN
+    FOR r_card IN
+        SELECT id, card_available_limit
+        FROM cards
+        WHERE user_id = p_user_id AND card_type_id IN (2,3)
+    LOOP
+        -- 200–300 TL arasında rastgele borç
+        debt_amount := 200 + floor(random() * 100);
+
+        -- Available limiti aşma
+        IF debt_amount > r_card.card_available_limit THEN
+            debt_amount := r_card.card_available_limit;
+        END IF;
+
+        -- Limit zaten 0 ise borç ekleme
+        IF debt_amount <= 0 THEN
+            CONTINUE;
+        END IF;
+
+        -- Borcu ekle
+        INSERT INTO debts (user_id, card_id, amount, description)
+        VALUES (p_user_id, r_card.id, debt_amount, 'Banka Borcu');
+
+        -- Available limit düş
+        UPDATE cards
+        SET card_available_limit = card_available_limit - debt_amount
+        WHERE id = r_card.id;
+
+    END LOOP;
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE assign_all_roles_permissions()
+LANGUAGE plpgsql
+AS $$
+BEGIN
+
+    -- MÜDÜR (1) → yetkiler (1,3,4)
+    INSERT INTO role_permissions(role_id, permission_id)
+    VALUES
+        (1,1),(1,3),(1,4)
+    ON CONFLICT DO NOTHING;
+
+    -- MÜDÜR YARDIMCISI (2) → yetkiler (1,3,4)
+    INSERT INTO role_permissions(role_id, permission_id)
+    VALUES
+        (2,1),(2,3),(2,4)
+    ON CONFLICT DO NOTHING;
+
+    -- ŞUBE MÜDÜRÜ (3) → kullanıcı, personel ve işlem yönetimi (2,3,4,5,6)
+    INSERT INTO role_permissions(role_id, permission_id)
+    VALUES
+        (3,3),(3,4)
+    ON CONFLICT DO NOTHING;
+
+    -- KREDİ UZMANI 
+    INSERT INTO role_permissions(role_id, permission_id)
+    VALUES
+        (4,6)
+    ON CONFLICT DO NOTHING;
+
+    -- MÜŞTERİ TEMSİLCİSİ 
+    INSERT INTO role_permissions(role_id, permission_id)
+    VALUES
+        (5,2),(5,5),(5,6)
+    ON CONFLICT DO NOTHING;
+
+    -- GİŞE GÖREVLİSİ 
+    INSERT INTO role_permissions(role_id, permission_id)
+    VALUES
+        (6,3),(6,6)
+    ON CONFLICT DO NOTHING;
+
+    -- GÜVENLİK GÖREVLİSİ yetki yok
+
+END;
+$$;
+
+CREATE OR REPLACE PROCEDURE pr_add_account_types()
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    INSERT INTO account_types (type, description)
+    VALUES ('Banka Hesabı', 'Günlük işlemler için kullanılan vadesiz hesap. Para yatırma, çekme ve havale işlemleri yapılabilir.')
+    ON CONFLICT (type) DO NOTHING;
+
+    INSERT INTO account_types (type, description)
+    VALUES ('Kredi Hesabı', 'Kredi kartı veya limitli borç işlemleri için kullanılan hesap türü.')
+    ON CONFLICT (type) DO NOTHING;
+
+    INSERT INTO account_types (type, description)
+    VALUES ('Hibrit Hesap', 'Hem birikim hem de günlük işlemler için kullanılabilen esnek hesap türü.')
+    ON CONFLICT (type) DO NOTHING;
+END
+$$;
+
+CREATE OR REPLACE PROCEDURE pr_add_card_types()
+LANGUAGE plpgsql
+AS $$
+
+BEGIN
+    INSERT INTO card_types (type, description) VALUES
+        ('banka', 'Fiziksel banka kartı, tüm işlemleri destekler'),
+        ('kredi', 'Fiziksel kredi kartı, tüm işlemleri destekler'),
+        ('hibrit', 'Hem banka hem kredi özelliği olan fiziksel kart'),
+        ('sanalkart', 'Sadece online işlemlerde kullanılabilen sanal kart')
+    ON CONFLICT (type) DO NOTHING;
+END;
+$$;
+
+
+
+CREATE OR REPLACE PROCEDURE pr_add_currency()
+LANGUAGE plpgsql
+AS $$
+BEGIN
+
+	INSERT INTO currency_rates (currency_code,rate_to_try) VALUES ('TRY',1)
+	ON CONFLICT (currency_code) DO NOTHING;
+
+	INSERT INTO currency_rates (currency_code,rate_to_try) VALUES ('USD',42.8275)
+	ON CONFLICT (currency_code) DO NOTHING;
+
+	INSERT INTO currency_rates (currency_code,rate_to_try) VALUES ('EUR',49.5386)
+	ON CONFLICT (currency_code) DO NOTHING;
+	
+END
+$$;
+

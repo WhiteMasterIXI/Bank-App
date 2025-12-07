@@ -1,0 +1,341 @@
+CREATE TABLE cities(
+	id SERIAL PRIMARY KEY,
+	name VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE branches(
+	id SERIAL PRIMARY KEY,
+	name VARCHAR(200) NOT NULL,
+	branch_code VARCHAR(20) UNIQUE NOT NULL,
+	city_id INT REFERENCES cities(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+	address TEXT
+);
+
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255),
+  surname VARCHAR(255),
+  email VARCHAR(255) UNIQUE,
+  password VARCHAR(255),
+  date_of_birth DATE,
+  gender SMALLINT,
+  is_admin BOOL DEFAULT FALSE,
+  is_personel BOOL DEFAULT FALSE,
+  createtime TIMESTAMP DEFAULT now(),
+  branch_id INT NOT NULL,
+  address TEXT,
+  phone_number VARCHAR(20),
+  CONSTRAINT fk_users_branch FOREIGN KEY (branch_id) 
+      REFERENCES branches(id)
+      ON UPDATE CASCADE
+      ON DELETE CASCADE
+);
+
+CREATE TABLE customers(
+  user_id INT PRIMARY KEY,
+  credit_score NUMERIC(5,2),
+  notes TEXT,
+  branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE SET NULL,
+  CONSTRAINT fk_customers_user FOREIGN KEY (user_id) REFERENCES users(id)
+      ON UPDATE CASCADE
+      ON DELETE CASCADE
+);
+
+CREATE TABLE roles(
+	id SERIAL PRIMARY KEY,
+	name VARCHAR(255),
+	description VARCHAR(255)
+);
+
+CREATE TABLE permissions(
+	id SERIAL PRIMARY KEY,
+	name VARCHAR(255) UNIQUE NOT NULL,
+	description VARCHAR(255)
+);
+
+CREATE TABLE role_permissions (
+    id SERIAL PRIMARY KEY,
+    role_id INT REFERENCES roles(id)
+        ON UPDATE CASCADE
+        ON DELETE CASCADE,
+    permission_id INT REFERENCES permissions(id)
+        ON UPDATE CASCADE
+);
+ALTER TABLE role_permissions
+ADD CONSTRAINT unique_role_permission UNIQUE(role_id, permission_id);
+
+CREATE TABLE personels(
+  user_id INT PRIMARY KEY,
+  role_id INT REFERENCES roles(id) ON UPDATE CASCADE ON DELETE SET NULL,
+  branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE SET NULL,
+  hire_date DATE,
+  salary NUMERIC(10,2),
+  last_assigned TIMESTAMP DEFAULT 2000-01-01,
+  CONSTRAINT fk_personels_user FOREIGN KEY (user_id) REFERENCES users(id)
+      ON UPDATE CASCADE
+      ON DELETE CASCADE
+);
+CREATE TABLE currency_rates (
+    id SERIAL PRIMARY KEY,
+    currency_code CHAR(3) UNIQUE NOT NULL,  -- USD, EUR, TRY
+    rate_to_try NUMERIC(15,6) NOT NULL,     -- 1 birim currency = ? TL
+    last_updated TIMESTAMP DEFAULT now()
+);
+CREATE TABLE account_types(
+	id SERIAL PRIMARY KEY,
+	type VARCHAR(255),
+	description VARCHAR(255)
+);
+
+ALTER TABLE account_types
+ADD CONSTRAINT uq_account_type UNIQUE(type);
+
+CREATE TABLE card_types(
+	id SERIAL PRIMARY KEY,
+	type VARCHAR(255),
+	description VARCHAR(255)
+);
+
+CREATE TABLE accounts(
+	id SERIAL PRIMARY KEY,
+	branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+	account_type_id INT REFERENCES account_types(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+	user_id INT REFERENCES users(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+	balance NUMERIC(15,2) DEFAULT 0.00,
+	currency CHAR(3) DEFAULT 'TRY',
+	status VARCHAR(20) DEFAULT 'active',
+	created_at TIMESTAMP DEFAULT now(),
+	CONSTRAINT fk_account_currency FOREIGN KEY (currency) 
+	    REFERENCES currency_rates(currency_code)
+	    ON UPDATE CASCADE
+	    ON DELETE RESTRICT
+);
+
+CREATE TABLE cards(
+	id SERIAL PRIMARY KEY,
+	branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE SET NULL,
+	user_id INT REFERENCES users(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+	account_id INT REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+	card_type_id INT REFERENCES card_types(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+	card_limit NUMERIC(15,2) DEFAULT 0.00,
+	status VARCHAR(20) DEFAULT 'active',
+	card_available_limit NUMERIC(15,2) DEFAULT 0.00,
+	card_number CHAR(16) UNIQUE NOT NULL
+);
+
+// yeni ekleyeceğim bunu 
+
+CREATE TABLE debts (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id) ON DELETE CASCADE,
+    card_id INT REFERENCES cards(id) ON DELETE CASCADE,
+    amount NUMERIC(15,2) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    status SMALLINT DEFAULT 0
+);
+
+CREATE TABLE transactions (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id) ON UPDATE CASCADE,               -- işlemi başlatan kullanıcı
+    branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    trans_type INT REFERENCES transaction_types(id) ON UPDATE CASCADE, -- işlem tipi (örn: transfer, payment, account, card)
+    account_id INT REFERENCES accounts(id) ON UPDATE CASCADE DEFAULT NULL,
+    amount NUMERIC(15,2) DEFAULT 0.00,                                -- genel tutar (bazı işlemler için boş kalabilir)
+    currency CHAR(3) DEFAULT 'TRY',
+    status VARCHAR(20) DEFAULT 'PENDING',                             -- PENDING, APPROVED, REJECTED
+    created_at TIMESTAMP DEFAULT now(),
+    approved_at TIMESTAMP
+);
+
+ALTER TABLE transactions ADD COLUMN trans_type VARCHAR(50);
+
+CREATE TABLE transfer_transactions (
+    transaction_id INT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+    sender_account_id INT REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    receiver_account_id INT REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    external_bank_name VARCHAR(255),   -- başka bankaya EFT ise
+    amount NUMERIC(15,2) DEFAULT 0.00,
+    currency CHAR(3) DEFAULT 'TRY',
+    external_iban VARCHAR(34),
+    created_at TIMESTAMP DEFAULT now(),
+    description TEXT
+);
+
+CREATE TABLE card_transactions (
+    transaction_id INT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+    card_type_id INT REFERENCES card_type(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    card_id INT REFERENCES cards(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    action VARCHAR(50),              -- create, close, freeze, unfreeze, limit_change
+    new_limit NUMERIC(15,2),
+    description TEXT
+);
+
+CREATE TABLE iban_address (
+    id SERIAL PRIMARY KEY,
+    user_id INT UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+    iban VARCHAR(50) UNIQUE NOT NULL,
+    time TIMESTAMP DEFAULT now(),
+    description TEXT DEFAULT NULL
+);
+
+CREATE TABLE account_transactions (
+    transaction_id INT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+    account_id INT REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    action VARCHAR(50),             -- create, close, freeze, unfreeze
+    reason TEXT
+);
+
+CREATE TABLE transaction_approvals (
+    transaction_id INT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+	branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE SET NULL,
+	trans_type INT REFERENCES transaction_types(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    personel_id INT REFERENCES personels(user_id) ON UPDATE CASCADE,
+	user_id INT REFERENCES users(id) ON UPDATE CASCADE,
+    status VARCHAR(20) DEFAULT 'PENDING', -- PENDING, APPROVED, REJECTED
+    assigned_at TIMESTAMP DEFAULT now(),
+    processed_at TIMESTAMP,
+	CONSTRAINT uq_transaction_approval UNIQUE(transaction_id)
+);
+ALTER TABLE transaction_approvals ALTER COLUMN trans_type TYPE VARCHAR(50);
+
+CREATE TABLE log_records (
+    id SERIAL PRIMARY KEY,
+	branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    transaction_id INT REFERENCES transactions(id) NULL,
+    user_id INT REFERENCES users(id) ON UPDATE CASCADE,
+	personel_id INT REFERENCES personels(user_id) NULL,
+	status VARCHAR(20) DEFAULT NULL,
+    log_type VARCHAR(50), -- TRANSACTION, USER_DATA, CARD_CREATE,ACCOUNT_CREATE
+    created_at TIMESTAMP DEFAULT now(),
+    description TEXT DEFAULT NULL
+);
+
+--INSERT ANOTHER TABLE
+CREATE OR REPLACE FUNCTION Record_user_creating()
+RETURNS TRIGGER AS $$
+BEGIN 
+INSERT INTO log_records(branch_id, transaction_id, user_id, personel_id,log_type)
+  VALUES (
+    NEW.branch_id,
+    NULL,
+	NEW.id,
+	NULL,
+    'USER_CREATE'
+  );
+
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_after_user_insert
+AFTER INSERT ON users
+FOR EACH ROW
+EXECUTE FUNCTION Record_user_creating();
+
+-- Update function
+CREATE OR REPLACE FUNCTION fn_record_user_updating()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO log_records(branch_id, transaction_id, user_id, personel_id,log_type)
+  VALUES (
+    NEW.branch_id,
+    NULL,
+	NEW.id,
+	NULL,
+    'USER_UPDATE'
+  );
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_users_after_update
+AFTER UPDATE ON users
+FOR EACH ROW
+EXECUTE FUNCTION fn_record_user_updating();
+
+-- DELETE function
+CREATE OR REPLACE FUNCTION fn_record_user_deleting()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO log_records(branch_id, transaction_id, user_id, personel_id,log_type)
+  VALUES (
+    OLD.branch_id,
+    NULL,
+	OLD.id,
+	NULL,
+    'USER_DELETE'
+  );
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_users_after_delete
+AFTER DELETE ON users
+FOR EACH ROW
+EXECUTE FUNCTION fn_record_user_deleting();
+
+-- CARD DELETE
+CREATE OR REPLACE FUNCTION record_card_delete()
+	RETURNS TRIGGER AS $$
+	BEGIN
+		INSERT INTO log_records(branch_id, transaction_id, user_id, personel_id,log_type)
+		VALUES(
+			OLD.branch_id,
+			NULL,
+			OLD.user_id,
+			NULL,
+			'CARD_DELETE'
+		);
+	RETURN OLD;
+	END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_card_deleting
+AFTER DELETE ON cards
+FOR EACH ROW
+EXECUTE FUNCTION record_card_delete();
+
+-- ACCOUNT CREATE
+CREATE OR REPLACE FUNCTION record_account_create()
+	RETURNS TRIGGER AS $$
+	BEGIN
+		INSERT INTO log_records(branch_id, transaction_id, user_id, personel_id,log_type)
+		VALUES(
+			NEW.branch_id,
+			NULL,
+			NEW.user_id,
+			NULL,
+			'ACCOUNT_CREATE'
+		);
+
+	RETURN NEW;
+	END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_accounts_creating
+AFTER INSERT ON accounts
+FOR EACH ROW
+EXECUTE FUNCTION record_account_create();
+
+-- ACCOUNT DELETE
+CREATE OR REPLACE FUNCTION record_account_delete()
+	RETURNS TRIGGER AS $$
+	BEGIN
+		INSERT INTO log_records(branch_id, transaction_id, user_id, personel_id,log_type)
+		VALUES(
+			OLD.branch_id,
+			NULL,
+			OLD.user_id,
+			NULL,
+			'ACCOUNT_DELETE'
+		);
+
+	RETURN OLD;
+	END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_accounts_deleting
+AFTER DELETE ON accounts
+FOR EACH ROW
+EXECUTE FUNCTION record_account_delete();

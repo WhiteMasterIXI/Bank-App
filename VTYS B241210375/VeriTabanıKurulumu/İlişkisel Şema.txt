@@ -1,0 +1,230 @@
+## CITIES
+
+cities(
+id PK,
+name
+)
+
+## BRANCHES
+
+branches(
+id PK,
+name,
+branch_code UNIQUE,
+city_id FK -> cities(id),
+address
+)
+
+## USERS
+
+users(
+id PK,
+name,
+surname,
+email UNIQUE,
+password,
+date_of_birth,
+gender,
+is_admin,
+is_personel,
+createtime,
+branch_id FK -> branches(id),
+address,
+phone_number
+)
+
+## CUSTOMERS
+
+customers(
+user_id PK FK -> users(id),
+credit_score,
+notes,
+branch_id FK -> branches(id)
+)
+
+## ROLES
+
+roles(
+id PK,
+name,
+description
+)
+
+## PERMISSIONS
+
+permissions(
+id PK,
+name UNIQUE,
+description
+)
+
+## ROLE_PERMISSIONS
+
+role_permissions(
+id PK,
+role_id FK -> roles(id),
+permission_id FK -> permissions(id),
+UNIQUE(role_id, permission_id)
+)
+
+## PERSONELS
+
+personels(
+user_id PK FK -> users(id),
+role_id FK -> roles(id),
+branch_id FK -> branches(id),
+hire_date,
+salary,
+last_assigned
+)
+
+## CURRENCY_RATES
+
+currency_rates(
+id PK,
+currency_code UNIQUE,
+rate_to_try,
+last_updated
+)
+
+## ACCOUNT_TYPES
+
+account_types(
+id PK,
+type UNIQUE,
+description
+)
+
+## CARD_TYPES
+
+card_types(
+id PK,
+type,
+description
+)
+
+## ACCOUNTS
+
+accounts(
+id PK,
+branch_id FK -> branches(id),
+account_type_id FK -> account_types(id),
+user_id FK -> users(id),
+balance,
+currency FK -> currency_rates(currency_code),
+status,
+created_at
+)
+
+## CARDS
+
+cards(
+id PK,
+branch_id FK -> branches(id),
+user_id FK -> users(id),
+account_id FK -> accounts(id),
+card_type_id FK -> card_types(id),
+card_limit,
+status,
+card_available_limit,
+card_number UNIQUE
+)
+
+## DEBTS
+
+debts(
+id PK,
+user_id FK -> users(id),
+card_id FK -> cards(id),
+amount,
+description,
+created_at,
+status
+)
+
+## TRANSACTIONS
+
+transactions(
+id PK,
+user_id FK -> users(id),
+branch_id FK -> branches(id),
+trans_type,
+account_id FK -> accounts(id),
+amount,
+currency,
+status,
+created_at,
+approved_at
+)
+
+## TRANSFER_TRANSACTIONS
+
+transfer_transactions(
+transaction_id PK FK -> transactions(id),
+sender_account_id FK -> accounts(id),
+receiver_account_id FK -> accounts(id),
+external_bank_name,
+amount,
+currency,
+external_iban,
+created_at,
+description
+)
+
+## CARD_TRANSACTIONS
+
+card_transactions(
+transaction_id PK FK -> transactions(id),
+card_type_id FK -> card_types(id),
+card_id FK -> cards(id),
+action,
+new_limit,
+description
+)
+
+## IBAN_ADDRESS
+
+iban_address(
+id PK,
+user_id UNIQUE FK -> users(id),
+iban UNIQUE,
+time,
+description
+)
+
+## ACCOUNT_TRANSACTIONS
+
+account_transactions(
+transaction_id PK FK -> transactions(id),
+account_id FK -> accounts(id),
+action,
+reason
+)
+
+## TRANSACTION_APPROVALS
+
+transaction_approvals(
+transaction_id PK FK -> transactions(id),
+branch_id FK -> branches(id),
+trans_type,
+personel_id FK -> personels(user_id),
+user_id FK -> users(id),
+status,
+assigned_at,
+processed_at,
+UNIQUE(transaction_id)
+)
+
+## LOG_RECORDS
+
+log_records(
+id PK,
+branch_id FK -> branches(id),
+transaction_id FK -> transactions(id),
+user_id FK -> users(id),
+personel_id FK -> personels(user_id),
+status,
+log_type,
+created_at,
+description
+)

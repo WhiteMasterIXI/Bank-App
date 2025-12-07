@@ -1,0 +1,189 @@
+CREATE TABLE cities(
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL
+);
+
+CREATE TABLE branches(
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(200) NOT NULL,
+    branch_code VARCHAR(20) UNIQUE NOT NULL,
+    city_id INT REFERENCES cities(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    address TEXT
+);
+
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255),
+    surname VARCHAR(255),
+    email VARCHAR(255) UNIQUE,
+    password VARCHAR(255),
+    date_of_birth DATE,
+    gender SMALLINT,
+    is_admin BOOL DEFAULT FALSE,
+    is_personel BOOL DEFAULT FALSE,
+    createtime TIMESTAMP DEFAULT now(),
+    branch_id INT NOT NULL REFERENCES branches(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    address TEXT,
+    phone_number VARCHAR(20)
+);
+
+CREATE TABLE customers(
+    user_id INT PRIMARY KEY REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    credit_score NUMERIC(5,2),
+    notes TEXT,
+    branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE CASCADE
+);
+
+CREATE TABLE roles(
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255),
+    description VARCHAR(255)
+);
+
+CREATE TABLE permissions(
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) UNIQUE NOT NULL,
+    description VARCHAR(255)
+);
+
+CREATE TABLE role_permissions (
+    id SERIAL PRIMARY KEY,
+    role_id INT REFERENCES roles(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    permission_id INT REFERENCES permissions(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT unique_role_permission UNIQUE(role_id, permission_id)
+);
+
+CREATE TABLE personels(
+    user_id INT PRIMARY KEY REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    role_id INT REFERENCES roles(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    hire_date DATE,
+    salary NUMERIC(10,2),
+    last_assigned TIMESTAMP DEFAULT '2000-01-01'
+);
+
+CREATE TABLE currency_rates (
+    id SERIAL PRIMARY KEY,
+    currency_code CHAR(3) UNIQUE NOT NULL,
+    rate_to_try NUMERIC(15,6) NOT NULL,
+    last_updated TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE account_types(
+    id SERIAL PRIMARY KEY,
+    type VARCHAR(255),
+    description VARCHAR(255),
+    CONSTRAINT uq_account_type UNIQUE(type)
+);
+
+CREATE TABLE card_types(
+    id SERIAL PRIMARY KEY,
+    type VARCHAR(255),
+    description VARCHAR(255)
+);
+
+CREATE TABLE accounts(
+    id SERIAL PRIMARY KEY,
+    branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    account_type_id INT REFERENCES account_types(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    user_id INT REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    balance NUMERIC(15,2) DEFAULT 0.00,
+    currency CHAR(3) DEFAULT 'TRY' REFERENCES currency_rates(currency_code) ON UPDATE CASCADE ON DELETE CASCADE,
+    status VARCHAR(20) DEFAULT 'active',
+    created_at TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE cards(
+    id SERIAL PRIMARY KEY,
+    branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    user_id INT REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    account_id INT REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    card_type_id INT REFERENCES card_types(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    card_limit NUMERIC(15,2) DEFAULT 0.00,
+    status VARCHAR(20) DEFAULT 'active',
+    card_available_limit NUMERIC(15,2) DEFAULT 0.00,
+    card_number CHAR(16) UNIQUE NOT NULL
+);
+
+CREATE TABLE debts (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    card_id INT REFERENCES cards(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    amount NUMERIC(15,2) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    status SMALLINT DEFAULT 0
+);
+
+CREATE TABLE transactions (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    trans_type VARCHAR(50), 
+    account_id INT REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    amount NUMERIC(15,2) DEFAULT 0.00,
+    currency CHAR(3) DEFAULT 'TRY',
+    status VARCHAR(20) DEFAULT 'PENDING',
+    created_at TIMESTAMP DEFAULT now(),
+    approved_at TIMESTAMP
+);
+
+CREATE TABLE transfer_transactions (
+    transaction_id INT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+    sender_account_id INT REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    receiver_account_id INT REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    external_bank_name VARCHAR(255),
+    amount NUMERIC(15,2) DEFAULT 0.00,
+    currency CHAR(3) DEFAULT 'TRY',
+    external_iban VARCHAR(34),
+    created_at TIMESTAMP DEFAULT now(),
+    description TEXT
+);
+
+CREATE TABLE card_transactions (
+    transaction_id INT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+    card_type_id INT REFERENCES card_types(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    card_id INT REFERENCES cards(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    action VARCHAR(50),
+    new_limit NUMERIC(15,2),
+    description TEXT
+);
+
+CREATE TABLE iban_address (
+    id SERIAL PRIMARY KEY,
+    user_id INT UNIQUE REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    iban VARCHAR(50) UNIQUE NOT NULL,
+    time TIMESTAMP DEFAULT now(),
+    description TEXT
+);
+
+CREATE TABLE account_transactions (
+    transaction_id INT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+    account_id INT REFERENCES accounts(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    action VARCHAR(50),
+    reason TEXT
+);
+
+CREATE TABLE transaction_approvals (
+    transaction_id INT PRIMARY KEY REFERENCES transactions(id) ON DELETE CASCADE,
+    branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    trans_type VARCHAR(50),
+    personel_id INT REFERENCES personels(user_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    user_id INT REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    status VARCHAR(20) DEFAULT 'PENDING',
+    assigned_at TIMESTAMP DEFAULT now(),
+    processed_at TIMESTAMP,
+    CONSTRAINT uq_transaction_approval UNIQUE(transaction_id)
+);
+
+CREATE TABLE log_records (
+    id SERIAL PRIMARY KEY,
+    branch_id INT REFERENCES branches(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    transaction_id INT REFERENCES transactions(id),
+    user_id INT REFERENCES users(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    personel_id INT REFERENCES personels(user_id),
+    status VARCHAR(20),
+    log_type VARCHAR(50),
+    created_at TIMESTAMP DEFAULT now(),
+    description TEXT
+);

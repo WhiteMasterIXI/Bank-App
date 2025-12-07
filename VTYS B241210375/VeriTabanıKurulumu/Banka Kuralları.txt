@@ -1,0 +1,117 @@
+1. Yetkiler ve Personel İşlemleri
+
+Her personelin sahip olabileceği işlemler bir “yetki listesi” üzerinden belirlenir.
+
+Personel sadece sahip olduğu yetkiler dahilindeki işlemleri gerçekleştirebilir.
+
+Müdür ve Müdür Yardımcısı tüm personele erişemez; yetkileri doğrultusunda erişim sınırları vardır.
+
+Örneğin: Müdür Yardımcısı, Müdür bilgilerine erişemez.
+
+2. Kullanıcı Türleri
+
+Sistemde iki farklı bilgi seti bulunur:
+
+Kullanıcı giriş bilgileri (sisteme giriş için)
+
+Kişinin rolüne göre bilgiler
+
+Personel ise personel bilgileri
+
+Müşteri ise müşteri bilgileri
+
+3. Havale ve Para Transferi
+
+Havale işlemi sadece:
+
+Müşterinin daha önce kayıtlı IBAN’larına
+
+Banka içindeki kayıtlı hesaplarına
+para gönderilmesine izin verir.
+
+4. Müşteri Bilgilerine Erişim
+
+Sistem müşterinin:
+
+Borç bilgilerini
+
+Yaptığı tüm işlemlerin kayıtlarını
+görüntüleyebilmelidir.
+
+5. Personel İş Yükü Dağılımı
+
+İş yükü personel arasında adil şekilde dağıtılır.
+
+Hangi personelin en son işlem yaptığı sistem tarafından takip edilir ve yeni işler buna göre yönlendirilir.
+
+6. Hesap ve Kart Kuralları
+Hesap Türleri
+
+Bankada üç tür hesap bulunur:
+
+Banka hesabı
+
+Kredi hesabı
+
+Hibrit hesap
+
+Kart Türleri
+
+Dört tür kart vardır:
+
+Banka kartı
+
+Kredi kartı
+
+Hibrit kart
+
+Sanal kart
+
+Kartlar yalnızca uygun hesap türlerine bağlanabilir.
+
+7. Hesap Oluşturma ve Silme Koşulları
+
+Bir kişinin kredi kartı açabilmesi için önce bir banka hesabı olması gerekir.
+
+Bir hesabı silebilmek için:
+
+Hesapta para varsa önce başka bir yere aktarılmalıdır.
+
+Hesapta herhangi bir kredi veya borç bulunuyorsa hesap silinemez.
+
+8. Kart Silme Koşulları
+
+Kredi, hibrit veya sanal kartların tamamen kapatılabilmesi için:
+
+Kart borçlarının tamamı ödenmiş olmalıdır.
+
+Borcu olan bir kart kesinlikle silinemez.
+
+9. Denetlenecek İşlemler
+
+Bazı işlemler personel denetimine tabidir:
+
+Havale işlemleri
+
+Kart oluşturma işlemleri
+
+Kart limit değişikliği
+
+Bu işlemler personel tarafından onaylanmadan gerçekleştirilmez.
+
+10. Otomatik Onaylanan İşlemler
+
+Denetim gerektirmeyen diğer işlemler sistem tarafından otomatik çalışır.
+
+Eğer işlem için gerekli koşullar sağlanıyorsa:
+
+Sistem işlemi otomatik olarak gerçekleştirir
+
+Şartlar eksik veya yanlışsa:
+
+Sistem işlemi otomatik reddeder.
+
+
+
+
+

@@ -1,0 +1,2513 @@
+--
+-- PostgreSQL database dump
+--
+
+\restrict Ojns5OPqARhXz99c1CTSYMORtyh40gYKFEyBc65MkjepqBleZrh81dad1xtv58x
+
+-- Dumped from database version 18.0
+-- Dumped by pg_dump version 18.0
+
+-- Started on 2025-12-06 15:57:29
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- TOC entry 2 (class 3079 OID 16872)
+-- Name: pgcrypto; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public;
+
+
+--
+-- TOC entry 5348 (class 0 OID 0)
+-- Dependencies: 2
+-- Name: EXTENSION pgcrypto; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION pgcrypto IS 'cryptographic functions';
+
+
+--
+-- TOC entry 316 (class 1255 OID 24654)
+-- Name: assign_all_roles_permissions(); Type: PROCEDURE; Schema: public; Owner: postgres
+--
+
+CREATE PROCEDURE public.assign_all_roles_permissions()
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    -- Önce tabloyu temizlemek istersen (opsiyonel)
+    -- DELETE FROM role_permissions;
+
+    -- MÜDÜR (1) → tüm yetkiler (1,2,3,4,5,6)
+    INSERT INTO role_permissions(role_id, permission_id)
+    VALUES
+        (1,1),(1,3),(1,4)
+    ON CONFLICT DO NOTHING;
+
+    -- MÜDÜR YARDIMCISI (2) → tüm yetkiler (1,2,3,4,5,6)
+    INSERT INTO role_permissions(role_id, permission_id)
+    VALUES
+        (2,1),(2,3),(2,4)
+    ON CONFLICT DO NOTHING;
+
+    -- ŞUBE MÜDÜRÜ (3) → kullanıcı, personel ve işlem yönetimi (2,3,4,5,6)
+    INSERT INTO role_permissions(role_id, permission_id)
+    VALUES
+        (3,3),(3,4)
+    ON CONFLICT DO NOTHING;
+
+    -- KREDİ UZMANI 
+    INSERT INTO role_permissions(role_id, permission_id)
+    VALUES
+        (4,6)
+    ON CONFLICT DO NOTHING;
+
+    -- MÜŞTERİ TEMSİLCİSİ 
+    INSERT INTO role_permissions(role_id, permission_id)
+    VALUES
+        (5,2),(5,5),(5,6)
+    ON CONFLICT DO NOTHING;
+
+    -- GİŞE GÖREVLİSİ 
+    INSERT INTO role_permissions(role_id, permission_id)
+    VALUES
+        (6,3),(6,6)
+    ON CONFLICT DO NOTHING;
+
+    -- GÜVENLİK GÖREVLİSİ yetki yok
+
+END;
+$$;
+
+
+ALTER PROCEDURE public.assign_all_roles_permissions() OWNER TO postgres;
+
+--
+-- TOC entry 314 (class 1255 OID 16841)
+-- Name: fn_record_user_deleting(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.fn_record_user_deleting() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  INSERT INTO log_records(branch_id, log_type, description)
+  VALUES (
+    OLD.branch_id,
+    'USER_DELETE',
+    'User deleted: Name = ' || OLD.name || ', Email = ' || OLD.email  -- Silinen kullanıcının bilgilerini description alanına yazıyoruz
+  );
+  RETURN OLD;
+END;
+$$;
+
+
+ALTER FUNCTION public.fn_record_user_deleting() OWNER TO postgres;
+
+--
+-- TOC entry 313 (class 1255 OID 16839)
+-- Name: fn_record_user_updating(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.fn_record_user_updating() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  INSERT INTO log_records(branch_id, user_id,log_type,description)
+  VALUES (
+    NEW.branch_id,
+	NEW.id,
+    'USER_UPDATE',
+	NEW.id || ' numarali kullanicininin kişisel bilgileri guncellenmistir.'
+  );
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.fn_record_user_updating() OWNER TO postgres;
+
+--
+-- TOC entry 295 (class 1255 OID 24621)
+-- Name: pr_add_account_types(); Type: PROCEDURE; Schema: public; Owner: postgres
+--
+
+CREATE PROCEDURE public.pr_add_account_types()
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    INSERT INTO account_types (type, description)
+    VALUES ('Banka Hesabı', 'Günlük işlemler için kullanılan vadesiz hesap. Para yatırma, çekme ve havale işlemleri yapılabilir.')
+    ON CONFLICT (type) DO NOTHING;
+
+    INSERT INTO account_types (type, description)
+    VALUES ('Kredi Hesabı', 'Kredi kartı veya limitli borç işlemleri için kullanılan hesap türü.')
+    ON CONFLICT (type) DO NOTHING;
+
+    INSERT INTO account_types (type, description)
+    VALUES ('Hibrit Hesap', 'Hem birikim hem de günlük işlemler için kullanılabilen esnek hesap türü.')
+    ON CONFLICT (type) DO NOTHING;
+END
+$$;
+
+
+ALTER PROCEDURE public.pr_add_account_types() OWNER TO postgres;
+
+--
+-- TOC entry 317 (class 1255 OID 16867)
+-- Name: pr_add_admin_and_manager(); Type: PROCEDURE; Schema: public; Owner: postgres
+--
+
+CREATE PROCEDURE public.pr_add_admin_and_manager()
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    mudur_role_id INT;
+    mudur_user_id INT;
+BEGIN
+    -- 1️⃣ Gerekli id'leri al
+    SELECT id INTO mudur_role_id FROM roles WHERE name = 'Müdür' LIMIT 1;
+
+    INSERT INTO users (name, surname, email, password, date_of_birth, gender, is_admin, is_personel, address, phone_number)
+    VALUES
+        ('Admin', 'Sistem', 'admin@bank.com', encode(digest('admin', 'sha256'), 'hex'), '1980-01-01', 0, 1, 0, 'Genel Merkez', '05000000000'),
+        ('Ahmet', 'Yılmaz', 'mudur@bank.com', encode(digest('manager', 'sha256'), 'hex'), '1985-05-05', 0, 0, 1, 'İstanbul Merkez', '05000000001')
+    ON CONFLICT (email) DO NOTHING;
+
+    SELECT id INTO mudur_user_id FROM users WHERE email = 'mudur@bank.com' LIMIT 1;
+
+    INSERT INTO personels (user_id, role_id)
+    VALUES
+        (mudur_user_id, mudur_role_id)
+    ON CONFLICT (user_id) DO NOTHING;
+END;
+$$;
+
+
+ALTER PROCEDURE public.pr_add_admin_and_manager() OWNER TO postgres;
+
+--
+-- TOC entry 297 (class 1255 OID 24627)
+-- Name: pr_add_card_types(); Type: PROCEDURE; Schema: public; Owner: postgres
+--
+
+CREATE PROCEDURE public.pr_add_card_types()
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    INSERT INTO card_types (type, description) VALUES
+        ('banka', 'Fiziksel banka kartı, tüm işlemleri destekler'),
+        ('kredi', 'Fiziksel kredi kartı, tüm işlemleri destekler'),
+        ('hibrit', 'Hem banka hem kredi özelliği olan fiziksel kart'),
+        ('sanalkart', 'Sadece online işlemlerde kullanılabilen sanal kart')
+    ON CONFLICT (type) DO NOTHING;
+END;
+$$;
+
+
+ALTER PROCEDURE public.pr_add_card_types() OWNER TO postgres;
+
+--
+-- TOC entry 309 (class 1255 OID 16865)
+-- Name: pr_add_cities_and_branches(); Type: PROCEDURE; Schema: public; Owner: postgres
+--
+
+CREATE PROCEDURE public.pr_add_cities_and_branches()
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    ist_id INT;
+    ank_id INT;
+    izm_id INT;
+    sak_id INT;
+BEGIN
+    -- 1) Şehirleri ekle (aynı isim varsa atla)
+    INSERT INTO cities (name) VALUES ('İstanbul');
+    INSERT INTO cities (name) VALUES ('Ankara');
+    INSERT INTO cities (name) VALUES ('İzmir');
+    INSERT INTO cities (name) VALUES ('Sakarya');
+
+    -- 2) Eklenen / var olan şehirlerin id'lerini al
+    SELECT id INTO ist_id FROM cities WHERE name = 'İstanbul' LIMIT 1;
+    SELECT id INTO ank_id FROM cities WHERE name = 'Ankara' LIMIT 1;
+    SELECT id INTO izm_id FROM cities WHERE name = 'İzmir' LIMIT 1;
+    SELECT id INTO sak_id FROM cities WHERE name = 'Sakarya' LIMIT 1;
+
+    -- 3) Şubeleri ekle (branch_code üzerinde UNIQUE varsa çakışmayı at)
+    INSERT INTO branches (name, branch_code, city_id, address)
+    VALUES
+      ('İstanbul Merkez', 'IST001', ist_id, 'Beyoğlu / İstanbul'),
+      ('Ankara Şube',    'ANK001', ank_id, 'Kızılay / Ankara'),
+      ('İzmir Şube',     'IZM001', izm_id, 'Konak / İzmir'),
+      ('Sakarya Şube',   'SAK001', sak_id, 'Adapazarı / Sakarya');
+END;
+$$;
+
+
+ALTER PROCEDURE public.pr_add_cities_and_branches() OWNER TO postgres;
+
+--
+-- TOC entry 296 (class 1255 OID 24624)
+-- Name: pr_add_currency(); Type: PROCEDURE; Schema: public; Owner: postgres
+--
+
+CREATE PROCEDURE public.pr_add_currency()
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+
+	INSERT INTO currency_rates (currency_code,rate_to_try) VALUES ('TRY',1)
+	ON CONFLICT (currency_code) DO NOTHING;
+
+	INSERT INTO currency_rates (currency_code,rate_to_try) VALUES ('USD',42.8275)
+	ON CONFLICT (currency_code) DO NOTHING;
+
+	INSERT INTO currency_rates (currency_code,rate_to_try) VALUES ('EUR',49.5386)
+	ON CONFLICT (currency_code) DO NOTHING;
+	
+END
+$$;
+
+
+ALTER PROCEDURE public.pr_add_currency() OWNER TO postgres;
+
+--
+-- TOC entry 315 (class 1255 OID 24939)
+-- Name: pr_add_debt_to_customer(integer); Type: PROCEDURE; Schema: public; Owner: postgres
+--
+
+CREATE PROCEDURE public.pr_add_debt_to_customer(IN p_user_id integer)
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    r_card RECORD;
+    debt_amount NUMERIC;
+BEGIN
+    FOR r_card IN
+        SELECT id, card_available_limit
+        FROM cards
+        WHERE user_id = p_user_id AND card_type_id IN (2,3)
+    LOOP
+        -- 200–300 TL arasında rastgele borç
+        debt_amount := 200 + floor(random() * 100);
+
+        -- Available limiti aşma
+        IF debt_amount > r_card.card_available_limit THEN
+            debt_amount := r_card.card_available_limit;
+        END IF;
+
+        -- Limit zaten 0 ise borç ekleme
+        IF debt_amount <= 0 THEN
+            CONTINUE;
+        END IF;
+
+        -- Borcu ekle
+        INSERT INTO debts (user_id, card_id, amount, description)
+        VALUES (p_user_id, r_card.id, debt_amount, 'Banka Borcu');
+
+        -- Available limit düş
+        UPDATE cards
+        SET card_available_limit = card_available_limit - debt_amount
+        WHERE id = r_card.id;
+
+    END LOOP;
+END;
+$$;
+
+
+ALTER PROCEDURE public.pr_add_debt_to_customer(IN p_user_id integer) OWNER TO postgres;
+
+--
+-- TOC entry 310 (class 1255 OID 16866)
+-- Name: pr_add_roles_and_permissions(); Type: PROCEDURE; Schema: public; Owner: postgres
+--
+
+CREATE PROCEDURE public.pr_add_roles_and_permissions()
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    mudur_id INT;
+BEGIN
+    -- 1️⃣ Ana Yetki Grupları
+    INSERT INTO permissions (name, description) VALUES
+        ('Log_Islemleri', 'Log kayıtlarını görüntüleme, yönetme yetkisi'),
+        ('Kullanıcı_Islemleri', 'Kullanıcı ekleme, güncelleme, silme işlemleri'),
+        ('Transfer_Islemleri', 'Havale, EFT ve para transferi işlemleri'),
+        ('Personel_Islemleri', 'Personel ekleme, düzenleme ve görev yönetimi'),
+        ('Musteri_Islemleri', 'Müşteri kayıt ve bilgi işlemleri'),
+        ('Kart_Hesap_Islemleri', 'Kart ve hesap oluşturma, güncelleme ve silme işlemleri')
+    ON CONFLICT (name) DO NOTHING;
+
+      INSERT INTO roles (name, description) VALUES
+        ('Müdür', 'Tüm sistem işlemlerini yönetebilir.'),
+        ('Müdür Yardımcısı', 'Müdüre bağlı çalışır, personel ve işlemleri yönetebilir.'),
+        ('Şube Müdürü', 'Sadece kendi şubesindeki işlemleri yönetebilir.'),
+        ('Kredi Uzmanı', 'Kredi başvurularını inceler ve onaylar.'),
+        ('Müşteri Temsilcisi', 'Müşteri hesaplarını ve bilgilerini yönetir.'),
+        ('Gişe Görevlisi', 'Para yatırma, çekme ve transfer işlemlerini yürütür.'),
+        ('Güvenlik Görevlisi', 'Sistem erişimi ve giriş loglarını denetler.'),
+        ('Hizmetli', 'Sistemsel erişimi olmayan personel.')
+    ON CONFLICT (name) DO NOTHING;
+END;
+$$;
+
+
+ALTER PROCEDURE public.pr_add_roles_and_permissions() OWNER TO postgres;
+
+--
+-- TOC entry 312 (class 1255 OID 16851)
+-- Name: record_account_create(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.record_account_create() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+	BEGIN
+		INSERT INTO log_records(branch_id, user_id,log_type,description)
+		VALUES(
+			NEW.branch_id,
+			NEW.user_id,
+			'ACCOUNT_CREATE',
+			NEW.id || 'numarali hesabiniz olusturulmustur.'
+		);
+
+	RETURN NEW;
+	END;
+$$;
+
+
+ALTER FUNCTION public.record_account_create() OWNER TO postgres;
+
+--
+-- TOC entry 311 (class 1255 OID 16855)
+-- Name: record_account_delete(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.record_account_delete() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+	BEGIN
+		INSERT INTO log_records(branch_id, user_id,log_type,description)
+		VALUES(
+			OLD.branch_id,
+			OLD.user_id,
+			'ACCOUNT_DELETE',
+			OLD.id || 'numaralı hesabınız silinmistir.'
+		);
+
+	RETURN OLD;
+	END;
+$$;
+
+
+ALTER FUNCTION public.record_account_delete() OWNER TO postgres;
+
+--
+-- TOC entry 289 (class 1255 OID 16849)
+-- Name: record_card_delete(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.record_card_delete() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+	BEGIN
+		INSERT INTO log_records(branch_id, user_id,log_type,description)
+		VALUES(
+			OLD.branch_id,
+			OLD.user_id,
+			'CARD_DELETE',
+			OLD.card_number || ' numaralı kartınız silinmiştir'
+		);
+	RETURN OLD;
+	END;
+$$;
+
+
+ALTER FUNCTION public.record_card_delete() OWNER TO postgres;
+
+--
+-- TOC entry 256 (class 1255 OID 16837)
+-- Name: record_user_creating(); Type: FUNCTION; Schema: public; Owner: postgres
+--
+
+CREATE FUNCTION public.record_user_creating() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN 
+INSERT INTO log_records(branch_id, user_id,log_type,description)
+  VALUES (
+    NEW.branch_id,
+	NEW.id,
+    'USER_CREATE',
+	NEW.id || 'id li yeni bir kullanıcı eklendi'
+  );
+
+  RETURN NEW;
+END;
+$$;
+
+
+ALTER FUNCTION public.record_user_creating() OWNER TO postgres;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- TOC entry 246 (class 1259 OID 16749)
+-- Name: account_transactions; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.account_transactions (
+    transaction_id integer NOT NULL,
+    account_id integer,
+    action character varying(50),
+    reason text
+);
+
+
+ALTER TABLE public.account_transactions OWNER TO postgres;
+
+--
+-- TOC entry 235 (class 1259 OID 16540)
+-- Name: account_types; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.account_types (
+    id integer NOT NULL,
+    type character varying(255),
+    description character varying(255)
+);
+
+
+ALTER TABLE public.account_types OWNER TO postgres;
+
+--
+-- TOC entry 234 (class 1259 OID 16539)
+-- Name: account_types_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.account_types_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.account_types_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5349 (class 0 OID 0)
+-- Dependencies: 234
+-- Name: account_types_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.account_types_id_seq OWNED BY public.account_types.id;
+
+
+--
+-- TOC entry 239 (class 1259 OID 16560)
+-- Name: accounts; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.accounts (
+    id integer NOT NULL,
+    branch_id integer,
+    account_type_id integer,
+    user_id integer,
+    balance numeric(15,2) DEFAULT 0.00,
+    currency character(3) DEFAULT 'TRY'::bpchar,
+    status character varying(20) DEFAULT 'active'::character varying,
+    created_at timestamp without time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.accounts OWNER TO postgres;
+
+--
+-- TOC entry 238 (class 1259 OID 16559)
+-- Name: accounts_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.accounts_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.accounts_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5350 (class 0 OID 0)
+-- Dependencies: 238
+-- Name: accounts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.accounts_id_seq OWNED BY public.accounts.id;
+
+
+--
+-- TOC entry 223 (class 1259 OID 16408)
+-- Name: branches; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.branches (
+    id integer NOT NULL,
+    name character varying(200) NOT NULL,
+    branch_code character varying(20) NOT NULL,
+    city_id integer,
+    address text
+);
+
+
+ALTER TABLE public.branches OWNER TO postgres;
+
+--
+-- TOC entry 222 (class 1259 OID 16407)
+-- Name: branches_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.branches_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.branches_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5351 (class 0 OID 0)
+-- Dependencies: 222
+-- Name: branches_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.branches_id_seq OWNED BY public.branches.id;
+
+
+--
+-- TOC entry 245 (class 1259 OID 16727)
+-- Name: card_transactions; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.card_transactions (
+    transaction_id integer NOT NULL,
+    card_id integer,
+    action character varying(50),
+    new_limit numeric(15,2),
+    description text,
+    card_type_id integer
+);
+
+
+ALTER TABLE public.card_transactions OWNER TO postgres;
+
+--
+-- TOC entry 237 (class 1259 OID 16550)
+-- Name: card_types; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.card_types (
+    id integer NOT NULL,
+    type character varying(255),
+    description character varying(255)
+);
+
+
+ALTER TABLE public.card_types OWNER TO postgres;
+
+--
+-- TOC entry 236 (class 1259 OID 16549)
+-- Name: card_types_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.card_types_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.card_types_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5352 (class 0 OID 0)
+-- Dependencies: 236
+-- Name: card_types_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.card_types_id_seq OWNED BY public.card_types.id;
+
+
+--
+-- TOC entry 241 (class 1259 OID 16592)
+-- Name: cards; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.cards (
+    id integer NOT NULL,
+    branch_id integer,
+    user_id integer,
+    account_id integer,
+    card_type_id integer,
+    card_limit numeric(15,2) DEFAULT 0.00,
+    status character varying(20) DEFAULT 'active'::character varying,
+    card_available_limit numeric(15,2) DEFAULT 0.00,
+    card_number character(16) NOT NULL
+);
+
+
+ALTER TABLE public.cards OWNER TO postgres;
+
+--
+-- TOC entry 240 (class 1259 OID 16591)
+-- Name: cards_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.cards_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.cards_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5353 (class 0 OID 0)
+-- Dependencies: 240
+-- Name: cards_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.cards_id_seq OWNED BY public.cards.id;
+
+
+--
+-- TOC entry 221 (class 1259 OID 16399)
+-- Name: cities; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.cities (
+    id integer NOT NULL,
+    name character varying(255) NOT NULL
+);
+
+
+ALTER TABLE public.cities OWNER TO postgres;
+
+--
+-- TOC entry 220 (class 1259 OID 16398)
+-- Name: cities_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.cities_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.cities_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5354 (class 0 OID 0)
+-- Dependencies: 220
+-- Name: cities_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.cities_id_seq OWNED BY public.cities.id;
+
+
+--
+-- TOC entry 233 (class 1259 OID 16527)
+-- Name: currency_rates; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.currency_rates (
+    id integer NOT NULL,
+    currency_code character(3) NOT NULL,
+    rate_to_try numeric(15,6) NOT NULL,
+    last_updated timestamp without time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.currency_rates OWNER TO postgres;
+
+--
+-- TOC entry 232 (class 1259 OID 16526)
+-- Name: currency_rates_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.currency_rates_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.currency_rates_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5355 (class 0 OID 0)
+-- Dependencies: 232
+-- Name: currency_rates_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.currency_rates_id_seq OWNED BY public.currency_rates.id;
+
+
+--
+-- TOC entry 226 (class 1259 OID 16447)
+-- Name: customers; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.customers (
+    user_id integer NOT NULL,
+    credit_score numeric(5,2),
+    notes text,
+    branch_id integer
+);
+
+
+ALTER TABLE public.customers OWNER TO postgres;
+
+--
+-- TOC entry 255 (class 1259 OID 24916)
+-- Name: debts; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.debts (
+    id integer NOT NULL,
+    user_id integer,
+    card_id integer,
+    amount numeric(15,2) NOT NULL,
+    description text,
+    created_at timestamp without time zone DEFAULT now(),
+    status smallint DEFAULT 0
+);
+
+
+ALTER TABLE public.debts OWNER TO postgres;
+
+--
+-- TOC entry 254 (class 1259 OID 24915)
+-- Name: debts_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.debts_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.debts_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5356 (class 0 OID 0)
+-- Dependencies: 254
+-- Name: debts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.debts_id_seq OWNED BY public.debts.id;
+
+
+--
+-- TOC entry 251 (class 1259 OID 24600)
+-- Name: iban_address; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.iban_address (
+    id integer NOT NULL,
+    iban character varying(50) NOT NULL,
+    created_at timestamp without time zone DEFAULT now(),
+    description text,
+    user_id integer
+);
+
+
+ALTER TABLE public.iban_address OWNER TO postgres;
+
+--
+-- TOC entry 250 (class 1259 OID 24599)
+-- Name: iban_address_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.iban_address_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.iban_address_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5357 (class 0 OID 0)
+-- Dependencies: 250
+-- Name: iban_address_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.iban_address_id_seq OWNED BY public.iban_address.id;
+
+
+--
+-- TOC entry 249 (class 1259 OID 16808)
+-- Name: log_records; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.log_records (
+    id integer NOT NULL,
+    branch_id integer,
+    transaction_id integer,
+    user_id integer,
+    personel_id integer,
+    status character varying(20) DEFAULT NULL::character varying,
+    log_type character varying(50),
+    created_at timestamp without time zone DEFAULT now(),
+    description text
+);
+
+
+ALTER TABLE public.log_records OWNER TO postgres;
+
+--
+-- TOC entry 248 (class 1259 OID 16807)
+-- Name: log_records_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.log_records_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.log_records_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5358 (class 0 OID 0)
+-- Dependencies: 248
+-- Name: log_records_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.log_records_id_seq OWNED BY public.log_records.id;
+
+
+--
+-- TOC entry 230 (class 1259 OID 16476)
+-- Name: permissions; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.permissions (
+    id integer NOT NULL,
+    name character varying(255) NOT NULL,
+    description character varying(255)
+);
+
+
+ALTER TABLE public.permissions OWNER TO postgres;
+
+--
+-- TOC entry 229 (class 1259 OID 16475)
+-- Name: permissions_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.permissions_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.permissions_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5359 (class 0 OID 0)
+-- Dependencies: 229
+-- Name: permissions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.permissions_id_seq OWNED BY public.permissions.id;
+
+
+--
+-- TOC entry 231 (class 1259 OID 16505)
+-- Name: personels; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.personels (
+    user_id integer NOT NULL,
+    role_id integer,
+    branch_id integer,
+    hire_date date,
+    salary numeric(10,2),
+    last_assigned timestamp without time zone DEFAULT '2000-01-01 00:00:00'::timestamp without time zone
+);
+
+
+ALTER TABLE public.personels OWNER TO postgres;
+
+--
+-- TOC entry 253 (class 1259 OID 24635)
+-- Name: role_permissions; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.role_permissions (
+    id integer NOT NULL,
+    role_id integer,
+    permission_id integer
+);
+
+
+ALTER TABLE public.role_permissions OWNER TO postgres;
+
+--
+-- TOC entry 252 (class 1259 OID 24634)
+-- Name: role_permissions_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.role_permissions_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.role_permissions_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5360 (class 0 OID 0)
+-- Dependencies: 252
+-- Name: role_permissions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.role_permissions_id_seq OWNED BY public.role_permissions.id;
+
+
+--
+-- TOC entry 228 (class 1259 OID 16466)
+-- Name: roles; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.roles (
+    id integer NOT NULL,
+    name character varying(255),
+    description character varying(255)
+);
+
+
+ALTER TABLE public.roles OWNER TO postgres;
+
+--
+-- TOC entry 227 (class 1259 OID 16465)
+-- Name: roles_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.roles_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.roles_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5361 (class 0 OID 0)
+-- Dependencies: 227
+-- Name: roles_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.roles_id_seq OWNED BY public.roles.id;
+
+
+--
+-- TOC entry 247 (class 1259 OID 16771)
+-- Name: transaction_approvals; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.transaction_approvals (
+    branch_id integer,
+    transaction_id integer NOT NULL,
+    trans_type character varying(50),
+    personel_id integer,
+    user_id integer,
+    status character varying(20) DEFAULT 'PENDING'::character varying,
+    assigned_at timestamp without time zone DEFAULT now(),
+    processed_at timestamp without time zone
+);
+
+
+ALTER TABLE public.transaction_approvals OWNER TO postgres;
+
+--
+-- TOC entry 243 (class 1259 OID 16634)
+-- Name: transactions; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.transactions (
+    id integer NOT NULL,
+    user_id integer,
+    branch_id integer,
+    amount numeric(15,2) DEFAULT 0.00,
+    currency character(3) DEFAULT 'TRY'::bpchar,
+    status character varying(20) DEFAULT 'PENDING'::character varying,
+    created_at timestamp without time zone DEFAULT now(),
+    approved_at timestamp without time zone,
+    account_id integer,
+    trans_type character varying(50)
+);
+
+
+ALTER TABLE public.transactions OWNER TO postgres;
+
+--
+-- TOC entry 242 (class 1259 OID 16633)
+-- Name: transactions_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.transactions_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.transactions_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5362 (class 0 OID 0)
+-- Dependencies: 242
+-- Name: transactions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.transactions_id_seq OWNED BY public.transactions.id;
+
+
+--
+-- TOC entry 244 (class 1259 OID 16661)
+-- Name: transfer_transactions; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.transfer_transactions (
+    transaction_id integer NOT NULL,
+    sender_account_id integer,
+    receiver_account_id integer,
+    external_bank_name character varying(255),
+    external_iban character varying(34),
+    description text,
+    amount numeric(15,2),
+    currency character(3) DEFAULT 'TRY'::bpchar,
+    created_at timestamp without time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.transfer_transactions OWNER TO postgres;
+
+--
+-- TOC entry 225 (class 1259 OID 16427)
+-- Name: users; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.users (
+    id integer NOT NULL,
+    name character varying(255),
+    surname character varying(255),
+    email character varying(255),
+    password character varying(255),
+    date_of_birth date,
+    gender smallint,
+    createtime timestamp without time zone DEFAULT now(),
+    branch_id integer,
+    address text,
+    phone_number character varying(20),
+    is_admin smallint DEFAULT 0,
+    is_personel smallint DEFAULT 0
+);
+
+
+ALTER TABLE public.users OWNER TO postgres;
+
+--
+-- TOC entry 224 (class 1259 OID 16426)
+-- Name: users_id_seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.users_id_seq
+    AS integer
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER SEQUENCE public.users_id_seq OWNER TO postgres;
+
+--
+-- TOC entry 5363 (class 0 OID 0)
+-- Dependencies: 224
+-- Name: users_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: postgres
+--
+
+ALTER SEQUENCE public.users_id_seq OWNED BY public.users.id;
+
+
+--
+-- TOC entry 5013 (class 2604 OID 16543)
+-- Name: account_types id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.account_types ALTER COLUMN id SET DEFAULT nextval('public.account_types_id_seq'::regclass);
+
+
+--
+-- TOC entry 5015 (class 2604 OID 16563)
+-- Name: accounts id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.accounts ALTER COLUMN id SET DEFAULT nextval('public.accounts_id_seq'::regclass);
+
+
+--
+-- TOC entry 5003 (class 2604 OID 16411)
+-- Name: branches id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.branches ALTER COLUMN id SET DEFAULT nextval('public.branches_id_seq'::regclass);
+
+
+--
+-- TOC entry 5014 (class 2604 OID 16553)
+-- Name: card_types id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.card_types ALTER COLUMN id SET DEFAULT nextval('public.card_types_id_seq'::regclass);
+
+
+--
+-- TOC entry 5020 (class 2604 OID 16595)
+-- Name: cards id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cards ALTER COLUMN id SET DEFAULT nextval('public.cards_id_seq'::regclass);
+
+
+--
+-- TOC entry 5002 (class 2604 OID 16402)
+-- Name: cities id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cities ALTER COLUMN id SET DEFAULT nextval('public.cities_id_seq'::regclass);
+
+
+--
+-- TOC entry 5011 (class 2604 OID 16530)
+-- Name: currency_rates id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.currency_rates ALTER COLUMN id SET DEFAULT nextval('public.currency_rates_id_seq'::regclass);
+
+
+--
+-- TOC entry 5039 (class 2604 OID 24919)
+-- Name: debts id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.debts ALTER COLUMN id SET DEFAULT nextval('public.debts_id_seq'::regclass);
+
+
+--
+-- TOC entry 5036 (class 2604 OID 24603)
+-- Name: iban_address id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.iban_address ALTER COLUMN id SET DEFAULT nextval('public.iban_address_id_seq'::regclass);
+
+
+--
+-- TOC entry 5033 (class 2604 OID 16811)
+-- Name: log_records id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.log_records ALTER COLUMN id SET DEFAULT nextval('public.log_records_id_seq'::regclass);
+
+
+--
+-- TOC entry 5009 (class 2604 OID 16479)
+-- Name: permissions id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.permissions ALTER COLUMN id SET DEFAULT nextval('public.permissions_id_seq'::regclass);
+
+
+--
+-- TOC entry 5038 (class 2604 OID 24638)
+-- Name: role_permissions id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.role_permissions ALTER COLUMN id SET DEFAULT nextval('public.role_permissions_id_seq'::regclass);
+
+
+--
+-- TOC entry 5008 (class 2604 OID 16469)
+-- Name: roles id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.roles ALTER COLUMN id SET DEFAULT nextval('public.roles_id_seq'::regclass);
+
+
+--
+-- TOC entry 5024 (class 2604 OID 16637)
+-- Name: transactions id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transactions ALTER COLUMN id SET DEFAULT nextval('public.transactions_id_seq'::regclass);
+
+
+--
+-- TOC entry 5004 (class 2604 OID 16430)
+-- Name: users id; Type: DEFAULT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users ALTER COLUMN id SET DEFAULT nextval('public.users_id_seq'::regclass);
+
+
+--
+-- TOC entry 5333 (class 0 OID 16749)
+-- Dependencies: 246
+-- Data for Name: account_transactions; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.account_transactions (transaction_id, account_id, action, reason) FROM stdin;
+\.
+
+
+--
+-- TOC entry 5322 (class 0 OID 16540)
+-- Dependencies: 235
+-- Data for Name: account_types; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.account_types (id, type, description) FROM stdin;
+1	Banka Hesabı	Günlük işlemler için kullanılan vadesiz hesap. Para yatırma, çekme ve havale işlemleri yapılabilir.
+2	Kredi Hesabı	Kredi kartı veya limitli borç işlemleri için kullanılan hesap türü.
+3	Hibrit Hesap	Hem birikim hem de günlük işlemler için kullanılabilen esnek hesap türü.
+\.
+
+
+--
+-- TOC entry 5326 (class 0 OID 16560)
+-- Dependencies: 239
+-- Data for Name: accounts; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.accounts (id, branch_id, account_type_id, user_id, balance, currency, status, created_at) FROM stdin;
+3	4	2	3	978779.00	TRY	active	2025-11-21 09:03:34.445448
+2	4	3	3	101402.00	USD	active	2025-11-19 20:38:58.553318
+\.
+
+
+--
+-- TOC entry 5310 (class 0 OID 16408)
+-- Dependencies: 223
+-- Data for Name: branches; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.branches (id, name, branch_code, city_id, address) FROM stdin;
+1	İstanbul Merkez	IST001	1	Beyoğlu / İstanbul
+2	Ankara Şube	ANK001	2	Kızılay / Ankara
+3	İzmir Şube	IZM001	3	Konak / İzmir
+4	Sakarya Şube	SAK001	4	Adapazarı / Sakarya
+\.
+
+
+--
+-- TOC entry 5332 (class 0 OID 16727)
+-- Dependencies: 245
+-- Data for Name: card_transactions; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.card_transactions (transaction_id, card_id, action, new_limit, description, card_type_id) FROM stdin;
+14	5	CARD_UPDATE	40000.00	\N	\N
+15	\N	CARD_CREATE	40000.00	\N	3
+16	5	CARD_UPDATE	40000.00	\N	\N
+17	5	CARD_UPDATE	40000.00	\N	\N
+18	6	CARD_UPDATE	40000.00	\N	\N
+19	5	CARD_UPDATE	40000.00	\N	\N
+20	\N	CARD_CREATE	50000.00	\N	2
+\.
+
+
+--
+-- TOC entry 5324 (class 0 OID 16550)
+-- Dependencies: 237
+-- Data for Name: card_types; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.card_types (id, type, description) FROM stdin;
+1	banka	Fiziksel banka kartı, tüm işlemleri destekler
+2	kredi	Fiziksel kredi kartı, tüm işlemleri destekler
+3	hibrit	Hem banka hem kredi özelliği olan fiziksel kart
+4	sanalkart	Sadece online işlemlerde kullanılabilen sanal kart
+\.
+
+
+--
+-- TOC entry 5328 (class 0 OID 16592)
+-- Dependencies: 241
+-- Data for Name: cards; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.cards (id, branch_id, user_id, account_id, card_type_id, card_limit, status, card_available_limit, card_number) FROM stdin;
+2	4	3	2	1	0.00	frozen	0.00	5354223497145077
+5	4	3	2	2	40000.00	frozen	39774.00	5354228317297271
+6	4	3	2	2	40000.00	frozen	39794.00	5354224773249674
+\.
+
+
+--
+-- TOC entry 5308 (class 0 OID 16399)
+-- Dependencies: 221
+-- Data for Name: cities; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.cities (id, name) FROM stdin;
+1	İstanbul
+2	Ankara
+3	İzmir
+4	Sakarya
+\.
+
+
+--
+-- TOC entry 5320 (class 0 OID 16527)
+-- Dependencies: 233
+-- Data for Name: currency_rates; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.currency_rates (id, currency_code, rate_to_try, last_updated) FROM stdin;
+2	TRY	1.000000	2025-11-19 20:04:15.955927
+3	USD	42.827500	2025-11-19 20:04:15.955927
+4	EUR	49.538600	2025-11-19 20:04:15.955927
+\.
+
+
+--
+-- TOC entry 5313 (class 0 OID 16447)
+-- Dependencies: 226
+-- Data for Name: customers; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.customers (user_id, credit_score, notes, branch_id) FROM stdin;
+3	\N	\N	4
+4	\N	\N	2
+11	\N	\N	2
+\.
+
+
+--
+-- TOC entry 5342 (class 0 OID 24916)
+-- Dependencies: 255
+-- Data for Name: debts; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.debts (id, user_id, card_id, amount, description, created_at, status) FROM stdin;
+8	3	6	205.00	Banka Borcu	2025-11-29 19:29:55.432848	0
+10	3	5	299.00	Banka Borcu	2025-11-29 19:29:55.432848	0
+11	3	6	256.00	Banka Borcu	2025-12-01 12:21:04.43652	0
+12	3	5	226.00	Banka Borcu	2025-12-01 12:21:04.43652	0
+\.
+
+
+--
+-- TOC entry 5338 (class 0 OID 24600)
+-- Dependencies: 251
+-- Data for Name: iban_address; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.iban_address (id, iban, created_at, description, user_id) FROM stdin;
+2	TR690006701000000036416536	2025-11-19 21:07:54.593766	asdfas	3
+5	TR970006259134659281846886	2025-11-24 15:37:37.411494	deneme	3
+6	TR510006269622796899738373	2025-11-29 21:59:08.721054	deneme	11
+\.
+
+
+--
+-- TOC entry 5336 (class 0 OID 16808)
+-- Dependencies: 249
+-- Data for Name: log_records; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.log_records (id, branch_id, transaction_id, user_id, personel_id, status, log_type, created_at, description) FROM stdin;
+21	4	\N	3	\N	\N	CARD_DELETE	2025-11-30 10:54:22.460525	5354222471125535 numaralı kartınız silinmiştir
+22	4	\N	3	\N	\N	CARD_DELETE	2025-11-30 10:54:34.097471	5354221860845380 numaralı kartınız silinmiştir
+23	\N	\N	3	\N	APPROVED	CARD_DEBT	2025-11-30 11:06:24.256559	2 numaralı hesaptan 5 kartına 2500 TL tutarında borç ödemesi gerçekleştirilmiştir.
+24	\N	15	3	10	APPROVED	CARD_CREATE	2025-11-30 12:12:38.980075	5354229958970473 numarasına sahip 40000.00 limitli bir kartınız oluşturulmuştur.
+25	\N	18	3	9	APPROVED		2025-11-30 12:18:02.378385	5354224773249674 numarasına sahip kartınızın limiti 40000.00 e değiştirilmiştir
+26	\N	18	3	9	APPROVED	CARD_UPDATE	2025-11-30 12:20:05.776267	5354224773249674 numarasına sahip kartınızın limiti 40000.00 e değiştirilmiştir
+27	\N	19	3	9	APPROVED	CARD_UPDATE	2025-11-30 12:26:31.713216	5354228317297271 numarasına sahip kartınızın limiti 40000.00 e değiştirilmiştir
+28	\N	20	3	10	APPROVED	CARD_CREATE	2025-11-30 12:29:25.190254	5354228431107828 numarasına sahip 50000.00 limitli bir kartınız oluşturulmuştur.
+29	4	\N	3	\N	\N	CARD_DELETE	2025-11-30 12:36:36.174199	5354228431107828 numaralı kartınız silinmiştir
+30	4	21	3	8	APPROVED	TRANSFER	2025-11-30 12:40:13.90402	Transfer işlemi onaylandı. Gönderici hesap ID: 3, alıcı hesap ID: 2, miktar: 5000.00 TL.
+31	\N	\N	3	\N	APPROVED	CARD_DEBT	2025-11-30 12:41:11.242683	3 numaralı hesaptan 5 kartına 2500 TL tutarında borç ödemesi gerçekleştirilmiştir.
+32	4	22	3	9	APPROVED	TRANSFER	2025-12-01 12:16:57.351405	Transfer işlemi onaylandı. Gönderici hesap ID: 2, alıcı hesap ID: 3, miktar: 100.00 TL.
+33	\N	\N	3	\N	APPROVED	CARD_DEBT	2025-12-01 12:21:36.816527	2 numaralı hesaptan 6 kartına 50 TL tutarında borç ödemesi gerçekleştirilmiştir.
+34	2	23	11	10	APPROVED	TRANSFER	2025-12-06 14:29:32.093443	Transfer işlemi onaylandı. Gönderici hesap ID: 6, alıcı IBAN: TR510006269622796899738373, miktar: 5000.00 TL.
+35	2	\N	11	\N	\N	CARD_DELETE	2025-12-06 14:30:07.681389	5354222455503962 numaralı kartınız silinmiştir
+36	2	\N	11	\N	\N	ACCOUNT_DELETE	2025-12-06 14:30:18.966524	6numaralı hesabınız silinmistir.
+37	\N	18	3	9	APPROVED	CARD_UPDATE	2025-12-06 14:43:41.759341	5354224773249674 numarasına sahip kartınızın limiti 40000.00 e değiştirilmiştir
+\.
+
+
+--
+-- TOC entry 5317 (class 0 OID 16476)
+-- Dependencies: 230
+-- Data for Name: permissions; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.permissions (id, name, description) FROM stdin;
+1	Log_Islemleri	Log kayıtlarını görüntüleme, yönetme yetkisi
+2	Kullanıcı_Islemleri	Kullanıcı ekleme, güncelleme, silme işlemleri
+3	Transfer_Islemleri	Havale, EFT ve para transferi işlemleri
+4	Personel_Islemleri	Personel ekleme, düzenleme ve görev yönetimi
+5	Hesap_Islemleri	Müşteri kayıt ve bilgi işlemleri
+6	Kart_Islemleri	Kart oluşturma, güncelleme ve silme işlemleri
+\.
+
+
+--
+-- TOC entry 5318 (class 0 OID 16505)
+-- Dependencies: 231
+-- Data for Name: personels; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.personels (user_id, role_id, branch_id, hire_date, salary, last_assigned) FROM stdin;
+2	1	\N	\N	\N	2025-11-22 10:49:59.70172
+8	6	4	2025-11-24	\N	2025-11-30 12:39:56.582185
+9	4	3	2025-11-24	\N	2025-12-01 12:12:29.754392
+10	5	1	2025-11-24	\N	2025-12-06 14:29:07.841605
+\.
+
+
+--
+-- TOC entry 5340 (class 0 OID 24635)
+-- Dependencies: 253
+-- Data for Name: role_permissions; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.role_permissions (id, role_id, permission_id) FROM stdin;
+1	1	1
+2	1	3
+3	1	4
+4	2	1
+5	2	3
+6	2	4
+7	3	3
+9	3	4
+10	4	6
+11	5	2
+12	5	5
+13	6	3
+14	6	6
+15	5	6
+\.
+
+
+--
+-- TOC entry 5315 (class 0 OID 16466)
+-- Dependencies: 228
+-- Data for Name: roles; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.roles (id, name, description) FROM stdin;
+1	Müdür	Tüm sistem işlemlerini yönetebilir.
+2	Müdür Yardımcısı	Müdüre bağlı çalışır, personel ve işlemleri yönetebilir.
+3	Şube Müdürü	Sadece kendi şubesindeki işlemleri yönetebilir.
+4	Kredi Uzmanı	Kredi başvurularını inceler ve onaylar.
+5	Müşteri Temsilcisi	Müşteri hesaplarını ve bilgilerini yönetir.
+6	Gişe Görevlisi	Para yatırma, çekme ve transfer işlemlerini yürütür.
+7	Güvenlik Görevlisi	Sistem erişimi ve giriş loglarını denetler.
+8	Hizmetli	Sistemsel erişimi olmayan personel.
+\.
+
+
+--
+-- TOC entry 5334 (class 0 OID 16771)
+-- Dependencies: 247
+-- Data for Name: transaction_approvals; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.transaction_approvals (branch_id, transaction_id, trans_type, personel_id, user_id, status, assigned_at, processed_at) FROM stdin;
+\N	14	CARD_UPDATE	9	3	APPROVED	2025-11-30 11:10:02.005819	\N
+\N	16	CARD_UPDATE	9	3	APPROVED	2025-11-30 11:21:29.168861	\N
+\N	17	CARD_UPDATE	9	3	APPROVED	2025-11-30 12:00:06.806391	\N
+\N	15	CARD_CREATE	10	3	APPROVED	2025-11-30 11:15:53.916667	\N
+\N	20	CARD_CREATE	10	3	APPROVED	2025-11-30 12:28:58.634246	\N
+4	21	TRANSFER	8	3	APPROVED	2025-11-30 12:39:56.580888	\N
+4	22	TRANSFER	9	3	APPROVED	2025-12-01 12:12:29.752705	\N
+2	23	TRANSFER	10	11	APPROVED	2025-12-06 14:29:07.836411	\N
+\N	19	CARD_UPDATE	9	3	REJECTED	2025-11-30 12:26:08.967674	\N
+\N	18	CARD_UPDATE	9	3	APPROVED	2025-11-30 12:16:11.162043	\N
+\.
+
+
+--
+-- TOC entry 5330 (class 0 OID 16634)
+-- Dependencies: 243
+-- Data for Name: transactions; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.transactions (id, user_id, branch_id, amount, currency, status, created_at, approved_at, account_id, trans_type) FROM stdin;
+14	3	\N	40000.00	TRY	PENDING	2025-11-30 11:10:01.991127	\N	\N	CARD_UPDATE
+15	3	4	40000.00	TRY	PENDING	2025-11-30 11:15:53.907549	\N	2	CARD_CREATE
+16	3	\N	40000.00	TRY	PENDING	2025-11-30 11:21:29.161069	\N	\N	CARD_UPDATE
+17	3	\N	40000.00	TRY	PENDING	2025-11-30 12:00:06.785586	\N	\N	CARD_UPDATE
+18	3	\N	40000.00	TRY	PENDING	2025-11-30 12:16:11.152791	\N	\N	CARD_UPDATE
+19	3	\N	40000.00	TRY	PENDING	2025-11-30 12:26:08.958531	\N	\N	CARD_UPDATE
+20	3	4	50000.00	TRY	PENDING	2025-11-30 12:28:58.624825	\N	2	CARD_CREATE
+21	3	4	5000.00	TRY	PENDING	2025-11-30 12:39:56.568318	\N	3	Faturalar
+22	3	4	100.00	USD	PENDING	2025-12-01 12:12:29.7169	\N	2	Kredi borcu
+23	11	2	5000.00	USD	PENDING	2025-12-06 14:29:07.787141	\N	\N	Faturalar
+\.
+
+
+--
+-- TOC entry 5331 (class 0 OID 16661)
+-- Dependencies: 244
+-- Data for Name: transfer_transactions; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.transfer_transactions (transaction_id, sender_account_id, receiver_account_id, external_bank_name, external_iban, description, amount, currency, created_at) FROM stdin;
+21	3	2	\N	\N	deneme	5000.00	TRY	2025-11-30 12:39:56.57499
+22	2	3	\N	\N	baba	100.00	USD	2025-12-01 12:12:29.747547
+23	\N	\N	DenemeBank	TR510006269622796899738373	hesap aktarımı	5000.00	USD	2025-12-06 14:29:07.828595
+\.
+
+
+--
+-- TOC entry 5312 (class 0 OID 16427)
+-- Dependencies: 225
+-- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.users (id, name, surname, email, password, date_of_birth, gender, createtime, branch_id, address, phone_number, is_admin, is_personel) FROM stdin;
+3	Emre	Koca	emrekoca005@gmail.com	$2y$10$RI4zTkubwRQrlLLLtD./yeZhwhWqel.0X0Mu9VO5Kn5Q6iBxoEJ5O	2025-11-11	1	2025-11-02 13:15:19.232625	4	deneme	05003002040	0	0
+1	Admin	Sistem	admin@bank.com	$2a$06$3nEkvZvjHcpftYIf7HghoOvxwoPSRRDmmhAKVweqd016VDIkvnJqS	1980-01-01	0	2025-11-02 12:26:20.810157	\N	Genel Merkez	05000000000	1	0
+2	Ahmet	Yılmaz	mudur@bank.com	$2a$06$WlhztyrxuczARj/X/1DGH.JKed5E1KKK8RI3SG9A7y1lz6Sdq6gNm	1985-05-05	0	2025-11-02 12:26:20.810157	\N	İstanbul Merkez	05000000001	0	1
+4	batu	&ouml;z	batuhan@gmail.com	$2y$10$//Bz03nmSVT4CU3LznwcDek66sLrBai935rBK.QxUVeIhb2VIMHSa	2005-07-24	1	2025-11-12 12:03:10.730236	2	kayseriiii	05003002040	0	0
+8	Ali	Kahraman	Ali54@gmail.com	$2y$10$n7kBKJ48XiOvR3Z6FXnxuuiTIqp/XNGtIDGlYjzAhxkIrEccbvOIe	\N	\N	2025-11-24 16:02:00.262407	4	\N	\N	0	1
+9	Mehmet	&Ccedil;oban	mehmer@gmail.com	$2y$10$KeKHrYPeZtD1l5swMNscS.VV.PNX7qJ9Hq7QeTbRWgjJBHTt2AVYu	\N	\N	2025-11-24 16:48:06.821089	3	\N	\N	0	1
+10	Ahmet	Akif	Ahmet@gmail.com	$2y$10$Vnu31S7JH2UluADTnX6hwu4RY3cjxjZg2XvCikEv1Tjnhcgoooln2	\N	\N	2025-11-24 16:51:33.516173	1	\N	\N	0	1
+11	Eren	Koca	erenkoca005@gmail.com	$2y$10$fzwxvi0Y6jB2.z9pwyXqRuphE2zJT.U8Ynkc12c22DsMVEg2ZGjgu	2005-11-20	1	2025-11-29 21:48:36.456528	2	deneme adresi asdadas	05412517480	0	0
+\.
+
+
+--
+-- TOC entry 5364 (class 0 OID 0)
+-- Dependencies: 234
+-- Name: account_types_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.account_types_id_seq', 3, true);
+
+
+--
+-- TOC entry 5365 (class 0 OID 0)
+-- Dependencies: 238
+-- Name: accounts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.accounts_id_seq', 6, true);
+
+
+--
+-- TOC entry 5366 (class 0 OID 0)
+-- Dependencies: 222
+-- Name: branches_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.branches_id_seq', 4, true);
+
+
+--
+-- TOC entry 5367 (class 0 OID 0)
+-- Dependencies: 236
+-- Name: card_types_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.card_types_id_seq', 4, true);
+
+
+--
+-- TOC entry 5368 (class 0 OID 0)
+-- Dependencies: 240
+-- Name: cards_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.cards_id_seq', 16, true);
+
+
+--
+-- TOC entry 5369 (class 0 OID 0)
+-- Dependencies: 220
+-- Name: cities_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.cities_id_seq', 4, true);
+
+
+--
+-- TOC entry 5370 (class 0 OID 0)
+-- Dependencies: 232
+-- Name: currency_rates_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.currency_rates_id_seq', 4, true);
+
+
+--
+-- TOC entry 5371 (class 0 OID 0)
+-- Dependencies: 254
+-- Name: debts_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.debts_id_seq', 12, true);
+
+
+--
+-- TOC entry 5372 (class 0 OID 0)
+-- Dependencies: 250
+-- Name: iban_address_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.iban_address_id_seq', 6, true);
+
+
+--
+-- TOC entry 5373 (class 0 OID 0)
+-- Dependencies: 248
+-- Name: log_records_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.log_records_id_seq', 37, true);
+
+
+--
+-- TOC entry 5374 (class 0 OID 0)
+-- Dependencies: 229
+-- Name: permissions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.permissions_id_seq', 6, true);
+
+
+--
+-- TOC entry 5375 (class 0 OID 0)
+-- Dependencies: 252
+-- Name: role_permissions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.role_permissions_id_seq', 15, true);
+
+
+--
+-- TOC entry 5376 (class 0 OID 0)
+-- Dependencies: 227
+-- Name: roles_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.roles_id_seq', 8, true);
+
+
+--
+-- TOC entry 5377 (class 0 OID 0)
+-- Dependencies: 242
+-- Name: transactions_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.transactions_id_seq', 23, true);
+
+
+--
+-- TOC entry 5378 (class 0 OID 0)
+-- Dependencies: 224
+-- Name: users_id_seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.users_id_seq', 11, true);
+
+
+--
+-- TOC entry 5097 (class 2606 OID 24669)
+-- Name: account_transactions account_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.account_transactions
+    ADD CONSTRAINT account_transactions_pkey PRIMARY KEY (transaction_id);
+
+
+--
+-- TOC entry 5099 (class 2606 OID 16759)
+-- Name: account_transactions account_transactions_transaction_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.account_transactions
+    ADD CONSTRAINT account_transactions_transaction_id_key UNIQUE (transaction_id);
+
+
+--
+-- TOC entry 5073 (class 2606 OID 16548)
+-- Name: account_types account_types_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.account_types
+    ADD CONSTRAINT account_types_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5081 (class 2606 OID 16570)
+-- Name: accounts accounts_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.accounts
+    ADD CONSTRAINT accounts_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5047 (class 2606 OID 16420)
+-- Name: branches branches_branch_code_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.branches
+    ADD CONSTRAINT branches_branch_code_key UNIQUE (branch_code);
+
+
+--
+-- TOC entry 5049 (class 2606 OID 16418)
+-- Name: branches branches_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.branches
+    ADD CONSTRAINT branches_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5093 (class 2606 OID 24666)
+-- Name: card_transactions card_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.card_transactions
+    ADD CONSTRAINT card_transactions_pkey PRIMARY KEY (transaction_id);
+
+
+--
+-- TOC entry 5095 (class 2606 OID 16737)
+-- Name: card_transactions card_transactions_transaction_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.card_transactions
+    ADD CONSTRAINT card_transactions_transaction_id_key UNIQUE (transaction_id);
+
+
+--
+-- TOC entry 5077 (class 2606 OID 16558)
+-- Name: card_types card_types_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.card_types
+    ADD CONSTRAINT card_types_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5083 (class 2606 OID 16604)
+-- Name: cards cards_card_number_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cards
+    ADD CONSTRAINT cards_card_number_key UNIQUE (card_number);
+
+
+--
+-- TOC entry 5085 (class 2606 OID 16602)
+-- Name: cards cards_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cards
+    ADD CONSTRAINT cards_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5043 (class 2606 OID 16406)
+-- Name: cities cities_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cities
+    ADD CONSTRAINT cities_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5069 (class 2606 OID 16538)
+-- Name: currency_rates currency_rates_currency_code_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.currency_rates
+    ADD CONSTRAINT currency_rates_currency_code_key UNIQUE (currency_code);
+
+
+--
+-- TOC entry 5071 (class 2606 OID 16536)
+-- Name: currency_rates currency_rates_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.currency_rates
+    ADD CONSTRAINT currency_rates_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5055 (class 2606 OID 16454)
+-- Name: customers customers_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT customers_pkey PRIMARY KEY (user_id);
+
+
+--
+-- TOC entry 5115 (class 2606 OID 24927)
+-- Name: debts debts_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.debts
+    ADD CONSTRAINT debts_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5107 (class 2606 OID 24612)
+-- Name: iban_address iban_address_iban_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.iban_address
+    ADD CONSTRAINT iban_address_iban_key UNIQUE (iban);
+
+
+--
+-- TOC entry 5109 (class 2606 OID 24610)
+-- Name: iban_address iban_address_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.iban_address
+    ADD CONSTRAINT iban_address_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5105 (class 2606 OID 16816)
+-- Name: log_records log_records_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.log_records
+    ADD CONSTRAINT log_records_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5061 (class 2606 OID 16487)
+-- Name: permissions permissions_name_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.permissions
+    ADD CONSTRAINT permissions_name_key UNIQUE (name);
+
+
+--
+-- TOC entry 5063 (class 2606 OID 16485)
+-- Name: permissions permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.permissions
+    ADD CONSTRAINT permissions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5067 (class 2606 OID 16510)
+-- Name: personels personels_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.personels
+    ADD CONSTRAINT personels_pkey PRIMARY KEY (user_id);
+
+
+--
+-- TOC entry 5111 (class 2606 OID 24641)
+-- Name: role_permissions role_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5057 (class 2606 OID 16474)
+-- Name: roles roles_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT roles_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5101 (class 2606 OID 24672)
+-- Name: transaction_approvals transaction_approvals_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transaction_approvals
+    ADD CONSTRAINT transaction_approvals_pkey PRIMARY KEY (transaction_id);
+
+
+--
+-- TOC entry 5087 (class 2606 OID 16644)
+-- Name: transactions transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transactions
+    ADD CONSTRAINT transactions_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5089 (class 2606 OID 24657)
+-- Name: transfer_transactions transfer_transactions_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transfer_transactions
+    ADD CONSTRAINT transfer_transactions_pkey PRIMARY KEY (transaction_id);
+
+
+--
+-- TOC entry 5091 (class 2606 OID 16671)
+-- Name: transfer_transactions transfer_transactions_transaction_id_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transfer_transactions
+    ADD CONSTRAINT transfer_transactions_transaction_id_key UNIQUE (transaction_id);
+
+
+--
+-- TOC entry 5065 (class 2606 OID 16913)
+-- Name: permissions unique_permission_name; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.permissions
+    ADD CONSTRAINT unique_permission_name UNIQUE (name);
+
+
+--
+-- TOC entry 5059 (class 2606 OID 16911)
+-- Name: roles unique_role_name; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.roles
+    ADD CONSTRAINT unique_role_name UNIQUE (name);
+
+
+--
+-- TOC entry 5113 (class 2606 OID 24653)
+-- Name: role_permissions unique_role_permission; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT unique_role_permission UNIQUE (role_id, permission_id);
+
+
+--
+-- TOC entry 5079 (class 2606 OID 24626)
+-- Name: card_types unique_type; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.card_types
+    ADD CONSTRAINT unique_type UNIQUE (type);
+
+
+--
+-- TOC entry 5075 (class 2606 OID 24623)
+-- Name: account_types uq_account_type; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.account_types
+    ADD CONSTRAINT uq_account_type UNIQUE (type);
+
+
+--
+-- TOC entry 5045 (class 2606 OID 16864)
+-- Name: cities uq_cities_name; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cities
+    ADD CONSTRAINT uq_cities_name UNIQUE (name);
+
+
+--
+-- TOC entry 5103 (class 2606 OID 16781)
+-- Name: transaction_approvals uq_transaction_approval; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transaction_approvals
+    ADD CONSTRAINT uq_transaction_approval UNIQUE (transaction_id);
+
+
+--
+-- TOC entry 5051 (class 2606 OID 16441)
+-- Name: users users_email_key; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_email_key UNIQUE (email);
+
+
+--
+-- TOC entry 5053 (class 2606 OID 16439)
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+
+--
+-- TOC entry 5157 (class 2620 OID 16852)
+-- Name: accounts trg_accounts_creating; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_accounts_creating AFTER INSERT ON public.accounts FOR EACH ROW EXECUTE FUNCTION public.record_account_create();
+
+
+--
+-- TOC entry 5158 (class 2620 OID 16856)
+-- Name: accounts trg_accounts_deleting; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_accounts_deleting AFTER DELETE ON public.accounts FOR EACH ROW EXECUTE FUNCTION public.record_account_delete();
+
+
+--
+-- TOC entry 5154 (class 2620 OID 16838)
+-- Name: users trg_after_user_insert; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_after_user_insert AFTER INSERT ON public.users FOR EACH ROW EXECUTE FUNCTION public.record_user_creating();
+
+
+--
+-- TOC entry 5159 (class 2620 OID 16850)
+-- Name: cards trg_card_deleting; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_card_deleting AFTER DELETE ON public.cards FOR EACH ROW EXECUTE FUNCTION public.record_card_delete();
+
+
+--
+-- TOC entry 5155 (class 2620 OID 16842)
+-- Name: users trg_users_after_delete; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_users_after_delete AFTER DELETE ON public.users FOR EACH ROW EXECUTE FUNCTION public.fn_record_user_deleting();
+
+
+--
+-- TOC entry 5156 (class 2620 OID 16840)
+-- Name: users trg_users_after_update; Type: TRIGGER; Schema: public; Owner: postgres
+--
+
+CREATE TRIGGER trg_users_after_update AFTER UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION public.fn_record_user_updating();
+
+
+--
+-- TOC entry 5140 (class 2606 OID 24955)
+-- Name: account_transactions account_transactions_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.account_transactions
+    ADD CONSTRAINT account_transactions_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+--
+-- TOC entry 5141 (class 2606 OID 16760)
+-- Name: account_transactions account_transactions_transaction_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.account_transactions
+    ADD CONSTRAINT account_transactions_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5123 (class 2606 OID 16576)
+-- Name: accounts accounts_account_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.accounts
+    ADD CONSTRAINT accounts_account_type_id_fkey FOREIGN KEY (account_type_id) REFERENCES public.account_types(id) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5124 (class 2606 OID 16571)
+-- Name: accounts accounts_branch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.accounts
+    ADD CONSTRAINT accounts_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5125 (class 2606 OID 16581)
+-- Name: accounts accounts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.accounts
+    ADD CONSTRAINT accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5137 (class 2606 OID 25021)
+-- Name: card_transactions card_transactions_card_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.card_transactions
+    ADD CONSTRAINT card_transactions_card_id_fkey FOREIGN KEY (card_id) REFERENCES public.cards(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5138 (class 2606 OID 24910)
+-- Name: card_transactions card_transactions_card_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.card_transactions
+    ADD CONSTRAINT card_transactions_card_type_id_fkey FOREIGN KEY (card_type_id) REFERENCES public.card_types(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5139 (class 2606 OID 16738)
+-- Name: card_transactions card_transactions_transaction_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.card_transactions
+    ADD CONSTRAINT card_transactions_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5127 (class 2606 OID 16615)
+-- Name: cards cards_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cards
+    ADD CONSTRAINT cards_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5128 (class 2606 OID 16605)
+-- Name: cards cards_branch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cards
+    ADD CONSTRAINT cards_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+--
+-- TOC entry 5129 (class 2606 OID 16620)
+-- Name: cards cards_card_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cards
+    ADD CONSTRAINT cards_card_type_id_fkey FOREIGN KEY (card_type_id) REFERENCES public.card_types(id) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5130 (class 2606 OID 16610)
+-- Name: cards cards_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.cards
+    ADD CONSTRAINT cards_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5118 (class 2606 OID 16455)
+-- Name: customers customers_branch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT customers_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+--
+-- TOC entry 5152 (class 2606 OID 24933)
+-- Name: debts debts_card_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.debts
+    ADD CONSTRAINT debts_card_id_fkey FOREIGN KEY (card_id) REFERENCES public.cards(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5153 (class 2606 OID 24928)
+-- Name: debts debts_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.debts
+    ADD CONSTRAINT debts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5126 (class 2606 OID 16586)
+-- Name: accounts fk_account_currency; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.accounts
+    ADD CONSTRAINT fk_account_currency FOREIGN KEY (currency) REFERENCES public.currency_rates(currency_code) ON UPDATE CASCADE ON DELETE RESTRICT;
+
+
+--
+-- TOC entry 5116 (class 2606 OID 24888)
+-- Name: branches fk_branches_city_id; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.branches
+    ADD CONSTRAINT fk_branches_city_id FOREIGN KEY (city_id) REFERENCES public.cities(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5119 (class 2606 OID 16460)
+-- Name: customers fk_customers_user; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT fk_customers_user FOREIGN KEY (user_id) REFERENCES public.users(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5120 (class 2606 OID 16521)
+-- Name: personels fk_personels_user; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.personels
+    ADD CONSTRAINT fk_personels_user FOREIGN KEY (user_id) REFERENCES public.users(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5117 (class 2606 OID 24678)
+-- Name: users fk_users_branch; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT fk_users_branch FOREIGN KEY (branch_id) REFERENCES public.branches(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5146 (class 2606 OID 16817)
+-- Name: log_records log_records_branch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.log_records
+    ADD CONSTRAINT log_records_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+--
+-- TOC entry 5147 (class 2606 OID 24905)
+-- Name: log_records log_records_personel_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.log_records
+    ADD CONSTRAINT log_records_personel_id_fkey FOREIGN KEY (personel_id) REFERENCES public.personels(user_id) ON DELETE SET NULL;
+
+
+--
+-- TOC entry 5148 (class 2606 OID 16822)
+-- Name: log_records log_records_transaction_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.log_records
+    ADD CONSTRAINT log_records_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id);
+
+
+--
+-- TOC entry 5149 (class 2606 OID 24893)
+-- Name: log_records log_records_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.log_records
+    ADD CONSTRAINT log_records_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+
+--
+-- TOC entry 5121 (class 2606 OID 16516)
+-- Name: personels personels_branch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.personels
+    ADD CONSTRAINT personels_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+--
+-- TOC entry 5122 (class 2606 OID 16511)
+-- Name: personels personels_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.personels
+    ADD CONSTRAINT personels_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+--
+-- TOC entry 5150 (class 2606 OID 24647)
+-- Name: role_permissions role_permissions_permission_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_permission_id_fkey FOREIGN KEY (permission_id) REFERENCES public.permissions(id) ON UPDATE CASCADE;
+
+
+--
+-- TOC entry 5151 (class 2606 OID 24642)
+-- Name: role_permissions role_permissions_role_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.role_permissions
+    ADD CONSTRAINT role_permissions_role_id_fkey FOREIGN KEY (role_id) REFERENCES public.roles(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5142 (class 2606 OID 16782)
+-- Name: transaction_approvals transaction_approvals_branch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transaction_approvals
+    ADD CONSTRAINT transaction_approvals_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+--
+-- TOC entry 5143 (class 2606 OID 24900)
+-- Name: transaction_approvals transaction_approvals_personel_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transaction_approvals
+    ADD CONSTRAINT transaction_approvals_personel_id_fkey FOREIGN KEY (personel_id) REFERENCES public.personels(user_id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5144 (class 2606 OID 16787)
+-- Name: transaction_approvals transaction_approvals_transaction_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transaction_approvals
+    ADD CONSTRAINT transaction_approvals_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id) ON DELETE CASCADE;
+
+
+--
+-- TOC entry 5145 (class 2606 OID 16802)
+-- Name: transaction_approvals transaction_approvals_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transaction_approvals
+    ADD CONSTRAINT transaction_approvals_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON UPDATE CASCADE;
+
+
+--
+-- TOC entry 5131 (class 2606 OID 24960)
+-- Name: transactions transactions_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transactions
+    ADD CONSTRAINT transactions_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+--
+-- TOC entry 5132 (class 2606 OID 16650)
+-- Name: transactions transactions_branch_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transactions
+    ADD CONSTRAINT transactions_branch_id_fkey FOREIGN KEY (branch_id) REFERENCES public.branches(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+--
+-- TOC entry 5133 (class 2606 OID 16645)
+-- Name: transactions transactions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transactions
+    ADD CONSTRAINT transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON UPDATE CASCADE;
+
+
+--
+-- TOC entry 5134 (class 2606 OID 24950)
+-- Name: transfer_transactions transfer_transactions_receiver_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transfer_transactions
+    ADD CONSTRAINT transfer_transactions_receiver_account_id_fkey FOREIGN KEY (receiver_account_id) REFERENCES public.accounts(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+--
+-- TOC entry 5135 (class 2606 OID 24945)
+-- Name: transfer_transactions transfer_transactions_sender_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transfer_transactions
+    ADD CONSTRAINT transfer_transactions_sender_account_id_fkey FOREIGN KEY (sender_account_id) REFERENCES public.accounts(id) ON UPDATE CASCADE ON DELETE SET NULL;
+
+
+--
+-- TOC entry 5136 (class 2606 OID 24983)
+-- Name: transfer_transactions transfer_transactions_transaction_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.transfer_transactions
+    ADD CONSTRAINT transfer_transactions_transaction_id_fkey FOREIGN KEY (transaction_id) REFERENCES public.transactions(id) ON UPDATE CASCADE ON DELETE CASCADE;
+
+
+-- Completed on 2025-12-06 15:57:29
+
+--
+-- PostgreSQL database dump complete
+--
+
+\unrestrict Ojns5OPqARhXz99c1CTSYMORtyh40gYKFEyBc65MkjepqBleZrh81dad1xtv58x
+
