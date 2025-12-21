@@ -1,4 +1,5 @@
 <?php 
+require '../config/database.php';
 // 1	"Log_Islemleri"
 // 2	"Kullanıcı_Islemleri"
 // 3	"Transfer_Islemleri"

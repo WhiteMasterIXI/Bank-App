@@ -1,4 +1,4 @@
-<script src="Script/main.js"></script>
+
 <footer>
     <div class="footer__container">
         <div class="Bank__personels">
@@ -19,6 +19,6 @@
         <small>Copyright &copy; 2025 Bank</small>
     </div>
 </footer>
+<script src="<?=ROOT_URL?>Script/main.js"></script>
 </body>
-
 </html>

@@ -135,6 +135,10 @@ $Personel_Result = pg_query($connection, $Select_Personels);
                             unset($_SESSION['update_success']); ?></p>
                     <?php endif ?>
 
+                    <div class="Search-bar">
+                        <label>Find Person</label>
+                        <input type="text" class="Search_input" placeholder="Kisi Adi">
+                    </div>
                     <table class="personel-table">
                         <thead>
                             <tr>
@@ -144,18 +148,34 @@ $Personel_Result = pg_query($connection, $Select_Personels);
                                 <th>Sil</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody class="Personel_Table">
                             <?php while ($personel = pg_fetch_assoc($Personel_Result)) : ?>
                                 <?php if ($personel['role_id'] != '1') : ?>
-                                    <form action="Personel_Manage_Logic.php" method="POST">
-                                        <input type="hidden" name="user_id" value="<?= $personel['id'] ?>">
-                                        <tr>
-                                            <td><?= $personel['name'] . ' ' . $personel['surname'] ?></td>
-                                            <td><?= $personel['role'] ?></td>
-                                            <td><button type="submit" name="updated" class="ClientBtnUpdate">Düzenle</button></td>
-                                            <td><button type="submit" name="remove" class="ClientBtnDelete">Sil</button></td>
-                                        </tr>
-                                    </form>
+                                    <tr class="personel">
+                                        <td class="personel_name">
+                                            <?= $personel['name'] . ' ' . $personel['surname'] ?>
+                                        </td>
+
+                                        <td><?= $personel['role'] ?></td>
+
+                                        <td>
+                                            <form action="Personel_Manage_Logic.php" method="POST">
+                                                <input type="hidden" name="user_id" value="<?= $personel['id'] ?>">
+                                                <button type="submit" name="updated" class="ClientBtnUpdate">
+                                                    Düzenle
+                                                </button>
+                                            </form>
+                                        </td>
+
+                                        <td>
+                                            <form action="Personel_Manage_Logic.php" method="POST">
+                                                <input type="hidden" name="user_id" value="<?= $personel['id'] ?>">
+                                                <button type="submit" name="remove" class="ClientBtnDelete">
+                                                    Sil
+                                                </button>
+                                            </form>
+                                        </td>
+                                    </tr>
                                 <?php endif ?>
                             <?php endwhile ?>
                         </tbody>
@@ -166,6 +186,5 @@ $Personel_Result = pg_query($connection, $Select_Personels);
         </div>
     </div>
 </div>
-
 
 <?php include '../partials/footer.php'; ?>
